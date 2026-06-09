@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Management System — AWS Architecture</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#30363d;
+    --client:#7c4dff; --api:#ff7043; --compute:#ec407a; --data:#26a69a;
+    --async:#ffa726; --ai:#42a5f5; --storage:#66bb6a; --iam:#ab47bc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 700px at 20% -10%,#13233b 0%,var(--bg) 55%);
+    color:var(--ink); padding:32px 24px 64px; line-height:1.5;
+  }
+  .wrap{max-width:1280px;margin:0 auto}
+  header h1{font-size:26px;font-weight:700;letter-spacing:.2px}
+  header .sub{color:var(--muted);margin-top:6px;font-size:14px}
+  .badges{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--panel)}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:22px 0 8px}
+  .legend .item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+  .diagram{margin-top:18px;background:linear-gradient(180deg,#0f1722,#0c1119);
+    border:1px solid var(--line);border-radius:18px;padding:26px 22px;overflow:hidden}
+
+  .layer{margin:0 0 26px}
+  .layer:last-child{margin-bottom:0}
+  .layer-title{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:12px;font-weight:600}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;justify-content:center}
+
+  .node{
+    position:relative;background:var(--panel);border:1px solid var(--line);
+    border-top:3px solid var(--c,#888); border-radius:12px;padding:14px 16px;min-width:150px;max-width:230px;flex:1 1 150px;
+    box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .node .svc{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.4px}
+  .node .name{font-size:15px;font-weight:700;margin:3px 0 6px}
+  .node .desc{font-size:12px;color:var(--muted)}
+  .node .tag{display:inline-block;margin-top:8px;font-size:10px;color:var(--ink);
+    background:rgba(255,255,255,.06);border:1px solid var(--line);padding:2px 7px;border-radius:6px}
+
+  .fns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .fn{font-size:11px;background:rgba(236,64,122,.12);border:1px solid rgba(236,64,122,.4);
+    color:#ffd5e4;padding:3px 8px;border-radius:7px;white-space:nowrap}
+
+  .arrowcol{display:flex;justify-content:center;margin:-8px 0 18px}
+  .arrowcol span{color:var(--muted);font-size:20px;line-height:1}
+
+  .parallel{border:1px dashed var(--async);border-radius:14px;padding:16px;background:rgba(255,167,38,.05)}
+  .parallel .ptitle{font-size:12px;color:var(--async);font-weight:700;margin-bottom:12px;text-align:center;letter-spacing:.5px}
+  .branches{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+
+  .flows{margin-top:30px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .flow h3{font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .flow h3 .n{width:20px;height:20px;border-radius:50%;background:#1f6feb;color:#fff;font-size:11px;
+    display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+  .flow p{font-size:12.5px;color:var(--muted)}
+  .flow code{background:#0d1117;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:11.5px;color:#a5d6ff}
+
+  .explain{margin-top:30px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+  .explain h2{font-size:16px;margin-bottom:10px}
+  .explain p{font-size:13.5px;color:#c9d1d9;margin-bottom:10px}
+  .rubric{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .rubric .r{font-size:11px;border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:#0d1117;color:var(--muted)}
+  .rubric .r b{color:var(--ink)}
+  footer{margin-top:26px;color:var(--muted);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Event-Driven Serverless Order Management System</h1>
+    <div class="sub">AWS Learner Lab · Final Project Architecture — all logic serverless, event-driven, scalable</div>
+    <div class="badges">
+      <span class="badge">Serverless</span>
+      <span class="badge">Event-Driven</span>
+      <span class="badge">REST API</span>
+      <span class="badge">Step Functions Parallel</span>
+      <span class="badge">IAM: LabRole</span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="item"><span class="dot" style="background:var(--client)"></span>Client / Hosting</div>
+    <div class="item"><span class="dot" style="background:var(--api)"></span>API Layer</div>
+    <div class="item"><span class="dot" style="background:var(--compute)"></span>Compute (Lambda)</div>
+    <div class="item"><span class="dot" style="background:var(--data)"></span>Database</div>
+    <div class="item"><span class="dot" style="background:var(--async)"></span>Async Orchestration</div>
+    <div class="item"><span class="dot" style="background:var(--storage)"></span>Object Storage</div>
+    <div class="item"><span class="dot" style="background:var(--ai)"></span>AI Service</div>
+  </div>
+
+  <div class="diagram">
+
+    <!-- CLIENT -->
+    <div class="layer">
+      <div class="layer-title">1 · Client Layer</div>
+      <div class="row">
+        <div class="node" style="--c:var(--client)">
+          <div class="svc">AWS AMPLIFY</div>
+          <div class="name">Web Client</div>
+          <div class="desc">Static HTML / CSS / JavaScript UI. Calls REST APIs only — zero backend logic. Shows translate enhancement.</div>
+          <span class="tag">Hosted on Amplify</span>
+        </div>
+      </div>
+    </div>
+    <div class="arrowcol"><span>&#8595;&nbsp; HTTPS / fetch()</span></div>
+
+    <!-- API -->
+    <div class="layer">
+      <div class="layer-title">2 · API Layer</div>
+      <div class="row">
+        <div class="node" style="--c:var(--api)">
+          <div class="svc">AMAZON API GATEWAY</div>
+          <div class="name">REST API</div>
+          <div class="desc">Single REST API routing every endpoint to its Lambda. CORS enabled for the Amplify origin.</div>
+          <span class="tag">/orders · /subscriptions · /translate · /reports</span>
+        </div>
+      </div>
+    </div>
+    <div class="arrowcol"><span>&#8595;&nbsp; Lambda proxy integration</span></div>
+
+    <!-- COMPUTE -->
+    <div class="layer">
+      <div class="layer-title">3 · Compute Layer — AWS Lambda (one function per operation)</div>
+      <div class="row">
+        <div class="node" style="--c:var(--compute);max-width:100%">
+          <div class="svc">AWS LAMBDA · Python</div>
+          <div class="name">Business Logic Functions</div>
+          <div class="desc">All business logic lives here. Each REST endpoint maps to one function.</div>
+          <div class="fns">
+            <span class="fn">createOrder</span>
+            <span class="fn">getAllOrders</span>
+            <span class="fn">getOrder</span>
+            <span class="fn">updateOrder</span>
+            <span class="fn">deleteOrder ★</span>
+            <span class="fn">subscribe</span>
+            <span class="fn">unsubscribe</span>
+            <span class="fn">generatePdfSummary</span>
+            <span class="fn">translate</span>
+            <span class="fn">backupOrder</span>
+          </div>
+          <span class="tag">★ deleteOrder = required "Delete Order Code" deliverable</span>
+        </div>
+      </div>
+    </div>
+    <div class="arrowcol"><span>&#8595;</span></div>
+
+    <!-- DATA + ASYNC -->
+    <div class="layer">
+      <div class="layer-title">4 · Data &amp; Asynchronous Processing</div>
+      <div class="row">
+        <div class="node" style="--c:var(--data)">
+          <div class="svc">AMAZON DYNAMODB</div>
+          <div class="name">orders table</div>
+          <div class="desc">PK <b>orderId</b> (UUID — guaranteed unique). GSI <b>gsi-by-date</b> (constant PK + creationDate SK) → "get all sorted by creation date" without a scan.</div>
+          <span class="tag">Persistent store</span>
+        </div>
+
+        <div class="node" style="--c:var(--async);max-width:560px;flex:2 1 360px">
+          <div class="svc">AWS STEP FUNCTIONS · Standard</div>
+          <div class="name">Delete Fan-out State Machine</div>
+          <div class="desc">deleteOrder calls <code>StartExecution</code> (non-blocking) → returns 200 instantly. A <b>Parallel</b> state runs both branches at once — neither blocks the delete response.</div>
+          <div class="parallel" style="margin-top:12px">
+            <div class="ptitle">⇄ Parallel State (runs simultaneously)</div>
+            <div class="branches">
+              <div class="node" style="--c:var(--async);min-width:200px">
+                <div class="svc">BRANCH A → AMAZON SNS</div>
+                <div class="name">Publish</div>
+                <div class="desc">Email deleted-order details to all subscribers automatically.</div>
+              </div>
+              <div class="node" style="--c:var(--storage);min-width:200px">
+                <div class="svc">BRANCH B → AMAZON S3</div>
+                <div class="name">PutObject (backupOrder)</div>
+                <div class="desc">Write <code>{orderId}.txt</code> backup of the deleted order.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STORAGE + SNS + AI -->
+    <div class="layer">
+      <div class="layer-title">5 · Storage, Notifications &amp; AI</div>
+      <div class="row">
+        <div class="node" style="--c:var(--storage)">
+          <div class="svc">AMAZON S3</div>
+          <div class="name">Backups &amp; Reports Bucket</div>
+          <div class="desc">TXT backups of deleted orders + generated summary PDFs. generatePdfSummary reads all TXT files, writes the PDF here, returns a presigned URL.</div>
+          <span class="tag">.txt backups · summary.pdf</span>
+        </div>
+        <div class="node" style="--c:var(--async)">
+          <div class="svc">AMAZON SNS</div>
+          <div class="name">order-deleted Topic</div>
+          <div class="desc">Email subscriptions managed via subscribe / unsubscribe APIs. Fans out delete notifications automatically.</div>
+          <span class="tag">Email protocol</span>
+        </div>
+        <div class="node" style="--c:var(--ai)">
+          <div class="svc">AMAZON TRANSLATE</div>
+          <div class="name">Freestyle Enhancement</div>
+          <div class="desc">On-demand translation of an order description into another language, triggered from the UI and clearly visible there.</div>
+          <span class="tag">+5 pts · visible in UI</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IAM -->
+    <div class="layer">
+      <div class="layer-title">6 · Security</div>
+      <div class="row">
+        <div class="node" style="--c:var(--iam)">
+          <div class="svc">AWS IAM</div>
+          <div class="name">LabRole</div>
+          <div class="desc">Learner Lab execution role attached to all Lambdas and the Step Functions state machine.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /diagram -->
+
+  <!-- UNIFIED GRAPH -->
+  <div class="explain" style="margin-top:30px">
+    <h2>Unified Architecture Graph</h2>
+    <p style="margin-bottom:14px">Every API route, Lambda, the Step Functions parallel fan-out, and all backend services connected end to end — read left&nbsp;→&nbsp;right.</p>
+    <div style="overflow-x:auto">
+    <svg viewBox="0 0 1210 600" width="100%" style="min-width:1000px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto">
+          <path d="M0,0 L9,4 L0,8 z" fill="#8b949e"/>
+        </marker>
+        <marker id="ahA" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto">
+          <path d="M0,0 L9,4 L0,8 z" fill="#ffa726"/>
+        </marker>
+      </defs>
+
+      <!-- ===== EDGES (drawn first, under boxes) ===== -->
+      <!-- client -> api -->
+      <line x1="170" y1="300" x2="200" y2="300" stroke="#8b949e" stroke-width="1.6" marker-end="url(#ah)"/>
+
+      <!-- api -> lambdas (with method labels) -->
+      <g stroke="#8b949e" stroke-width="1.4" fill="none">
+        <line x1="340" y1="78"  x2="470" y2="78"  marker-end="url(#ah)"/>
+        <line x1="340" y1="136" x2="470" y2="136" marker-end="url(#ah)"/>
+        <line x1="340" y1="194" x2="470" y2="194" marker-end="url(#ah)"/>
+        <line x1="340" y1="252" x2="470" y2="252" marker-end="url(#ah)"/>
+        <line x1="340" y1="310" x2="470" y2="310" marker-end="url(#ah)"/>
+        <line x1="340" y1="368" x2="470" y2="368" marker-end="url(#ah)"/>
+        <line x1="340" y1="426" x2="470" y2="426" marker-end="url(#ah)"/>
+        <line x1="340" y1="484" x2="470" y2="484" marker-end="url(#ah)"/>
+        <line x1="340" y1="542" x2="470" y2="542" marker-end="url(#ah)"/>
+      </g>
+      <g font-size="8.5" fill="#7d8590" text-anchor="middle">
+        <text x="405" y="72">POST /orders</text>
+        <text x="405" y="130">GET /orders</text>
+        <text x="405" y="188">GET /orders/{id}</text>
+        <text x="405" y="246">PUT /orders/{id}</text>
+        <text x="405" y="304">DELETE /orders/{id}</text>
+        <text x="405" y="362">POST /subscriptions</text>
+        <text x="405" y="420">DELETE /subscriptions</text>
+        <text x="405" y="478">GET /reports/deleted-pdf</text>
+        <text x="405" y="536">POST /translate</text>
+      </g>
+
+      <!-- lambdas -> DynamoDB -->
+      <g stroke="#26a69a" stroke-width="1.4" fill="none">
+        <line x1="655" y1="78"  x2="730" y2="172" marker-end="url(#ah)"/>
+        <line x1="655" y1="136" x2="730" y2="186" marker-end="url(#ah)"/>
+        <line x1="655" y1="194" x2="730" y2="200" marker-end="url(#ah)"/>
+        <line x1="655" y1="252" x2="730" y2="214" marker-end="url(#ah)"/>
+        <line x1="655" y1="310" x2="730" y2="232" marker-end="url(#ah)"/>
+      </g>
+
+      <!-- deleteOrder -> Step Functions -->
+      <line x1="655" y1="312" x2="730" y2="310" stroke="#ffa726" stroke-width="1.8" marker-end="url(#ahA)"/>
+      <text x="690" y="300" font-size="8.5" fill="#ffa726" text-anchor="middle">StartExecution</text>
+
+      <!-- Step Functions parallel branches -> SNS / S3 -->
+      <path d="M890,300 C950,300 960,372 1010,378" stroke="#ffa726" stroke-width="1.8" fill="none" marker-end="url(#ahA)"/>
+      <path d="M890,320 C950,330 955,478 1010,484" stroke="#ffa726" stroke-width="1.8" fill="none" marker-end="url(#ahA)"/>
+      <text x="930" y="352" font-size="8.5" fill="#ffa726">A: Publish</text>
+      <text x="930" y="430" font-size="8.5" fill="#ffa726">B: PutObject</text>
+
+      <!-- subscribe / unsubscribe -> SNS -->
+      <g stroke="#ffa726" stroke-width="1.3" fill="none" opacity="0.85">
+        <line x1="655" y1="368" x2="1010" y2="380" marker-end="url(#ahA)"/>
+        <line x1="655" y1="426" x2="1010" y2="392" marker-end="url(#ahA)"/>
+      </g>
+      <!-- pdf -> S3 -->
+      <line x1="655" y1="484" x2="1010" y2="490" stroke="#66bb6a" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+      <text x="840" y="500" font-size="8.5" fill="#7d8590">read TXT · write PDF</text>
+      <!-- translate -> Amazon Translate -->
+      <line x1="655" y1="542" x2="730" y2="542" stroke="#42a5f5" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <!-- ===== NODES ===== -->
+      <!-- Client -->
+      <rect x="30" y="270" width="140" height="60" rx="9" fill="#161b22" stroke="#7c4dff" stroke-width="2"/>
+      <text x="100" y="295" font-size="11" font-weight="700" fill="#e6edf3" text-anchor="middle">Web Client</text>
+      <text x="100" y="312" font-size="9" fill="#8b949e" text-anchor="middle">AWS Amplify</text>
+
+      <!-- API Gateway -->
+      <rect x="200" y="55" width="140" height="510" rx="9" fill="#161b22" stroke="#ff7043" stroke-width="2"/>
+      <text x="270" y="300" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">API Gateway</text>
+      <text x="270" y="318" font-size="9" fill="#8b949e" text-anchor="middle">REST · 9 endpoints</text>
+
+      <!-- Lambdas -->
+      <g font-size="11" font-weight="700" fill="#e6edf3" text-anchor="middle">
+        <rect x="470" y="55"  width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="83">createOrder</text>
+        <rect x="470" y="113" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="141">getAllOrders</text>
+        <rect x="470" y="171" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="199">getOrder</text>
+        <rect x="470" y="229" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="257">updateOrder</text>
+        <rect x="470" y="287" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2.6"/>
+        <text x="562" y="315">deleteOrder ★</text>
+        <rect x="470" y="345" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="373">subscribe</text>
+        <rect x="470" y="403" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="431">unsubscribe</text>
+        <rect x="470" y="461" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="489">generatePdfSummary</text>
+        <rect x="470" y="519" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
+        <text x="562" y="547">translate</text>
+      </g>
+      <text x="562" y="42" font-size="9" fill="#8b949e" text-anchor="middle">AWS Lambda — one function per operation</text>
+
+      <!-- DynamoDB -->
+      <rect x="730" y="150" width="160" height="100" rx="9" fill="#161b22" stroke="#26a69a" stroke-width="2"/>
+      <text x="810" y="190" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">DynamoDB</text>
+      <text x="810" y="208" font-size="9" fill="#8b949e" text-anchor="middle">orders table</text>
+      <text x="810" y="224" font-size="8.5" fill="#8b949e" text-anchor="middle">PK orderId + GSI by date</text>
+
+      <!-- Step Functions -->
+      <rect x="730" y="288" width="160" height="46" rx="8" fill="#161b22" stroke="#ffa726" stroke-width="2"/>
+      <text x="810" y="310" font-size="11.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Step Functions</text>
+      <text x="810" y="325" font-size="8.5" fill="#ffa726" text-anchor="middle">⇄ Parallel: A ∥ B (async)</text>
+
+      <!-- Amazon Translate -->
+      <rect x="730" y="519" width="160" height="46" rx="8" fill="#161b22" stroke="#42a5f5" stroke-width="2"/>
+      <text x="810" y="541" font-size="11.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Amazon Translate</text>
+      <text x="810" y="556" font-size="8.5" fill="#42a5f5" text-anchor="middle">freestyle · +5 pts</text>
+
+      <!-- SNS -->
+      <rect x="1010" y="358" width="160" height="56" rx="9" fill="#161b22" stroke="#ffa726" stroke-width="2"/>
+      <text x="1090" y="382" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">Amazon SNS</text>
+      <text x="1090" y="399" font-size="8.5" fill="#8b949e" text-anchor="middle">order-deleted topic · email</text>
+
+      <!-- S3 -->
+      <rect x="1010" y="455" width="160" height="66" rx="9" fill="#161b22" stroke="#66bb6a" stroke-width="2"/>
+      <text x="1090" y="482" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">Amazon S3</text>
+      <text x="1090" y="499" font-size="8.5" fill="#8b949e" text-anchor="middle">.txt backups</text>
+      <text x="1090" y="513" font-size="8.5" fill="#8b949e" text-anchor="middle">summary.pdf</text>
+    </svg>
+    </div>
+    <p style="margin-top:12px;font-size:12px;color:#8b949e">
+      <span style="color:#ffa726">Amber edges</span> = asynchronous, non-blocking flow.
+      <code>deleteOrder</code> fires <code>StartExecution</code> and returns immediately; the Step Functions <b>Parallel</b> state then runs branch&nbsp;A (SNS publish) and branch&nbsp;B (S3 backup) at the same time.
+    </p>
+  </div>
+
+  <!-- FLOWS -->
+  <div class="flows">
+    <div class="flow">
+      <h3><span class="n">1</span> CRUD path</h3>
+      <p>UI → API Gateway → Lambda (<code>createOrder</code> / <code>getAllOrders</code> / <code>getOrder</code> / <code>updateOrder</code>) → DynamoDB. <code>getAllOrders</code> queries the <code>gsi-by-date</code> GSI for creation-date sorting.</p>
+    </div>
+    <div class="flow">
+      <h3><span class="n">2</span> Delete fan-out (event-driven core)</h3>
+      <p><code>deleteOrder</code> removes the item → <code>StartExecution</code> → returns 200 immediately. Step Functions <b>Parallel</b>: Branch A SNS email + Branch B S3 TXT backup. Delete never waits for either.</p>
+    </div>
+    <div class="flow">
+      <h3><span class="n">3</span> Notification subscription</h3>
+      <p>UI → <code>/subscriptions</code> (<code>subscribe</code>) / <code>/unsubscribe</code> → SNS Subscribe/Unsubscribe. Registered emails then receive delete notifications with no manual action.</p>
+    </div>
+    <div class="flow">
+      <h3><span class="n">4</span> PDF summary download</h3>
+      <p>UI → <code>/reports/deleted-pdf</code> → <code>generatePdfSummary</code> lists all S3 TXT backups, builds a summary PDF, stores it in S3, and returns the download URL in the response body.</p>
+    </div>
+    <div class="flow">
+      <h3><span class="n">5</span> Translate (freestyle)</h3>
+      <p>UI → <code>/translate</code> → <code>translate</code> Lambda → Amazon Translate → translated text back to the UI, shown next to the order description.</p>
+    </div>
+  </div>
+
+  <!-- EXPLANATION -->
+  <div class="explain">
+    <h2>How the services integrate</h2>
+    <p>The <b>Amplify</b>-hosted web client is pure presentation — it only makes HTTPS calls to <b>API Gateway</b>, which routes each request to a dedicated <b>Lambda</b> function holding all business logic. Order data persists in a single <b>DynamoDB</b> <code>orders</code> table; a Global Secondary Index lets us return all orders sorted by creation date efficiently.</p>
+    <p>Deletion is the event-driven heart of the system. <code>deleteOrder</code> removes the record and immediately hands off to a <b>Step Functions</b> state machine via a non-blocking <code>StartExecution</code> call, so the user gets an instant response. The state machine's <b>Parallel</b> state simultaneously (A) publishes to <b>SNS</b> — emailing every subscriber the deleted order's details — and (B) writes a TXT backup to <b>S3</b>. Neither branch delays the delete.</p>
+    <p>Subscriptions are handled directly against the SNS topic through dedicated APIs. The PDF summary API aggregates every TXT backup in S3 into a single PDF stored back in S3, returning a download URL. The freestyle <b>Amazon Translate</b> integration adds on-demand description translation surfaced in the UI. All compute runs under the Learner Lab <b>LabRole</b>.</p>
+    <div class="rubric">
+      <span class="r"><b>55</b> Order Management (DynamoDB + CRUD APIs)</span>
+      <span class="r"><b>10</b> Notification subscription (SNS APIs)</span>
+      <span class="r"><b>10</b> Async delete notification (SFn → SNS)</span>
+      <span class="r"><b>5</b> S3 backup (SFn → S3)</span>
+      <span class="r"><b>5</b> PDF summary (S3 + API)</span>
+      <span class="r"><b>5</b> Freestyle (Amazon Translate)</span>
+      <span class="r"><b>10</b> Client (Amplify web app)</span>
+    </div>
+  </div>
+
+  <footer>Order Management System — AWS Architecture · design diagram for the final project submission</footer>
+</div>
+</body>
+</html>
