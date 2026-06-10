@@ -193,9 +193,9 @@ def ensure_rest_api(apigw, lambda_client, account_id):
         print(f"{OK} REST API '{API_NAME}' already exists (id={api_id})")
     else:
         api = apigw.create_rest_api(
-            Name=API_NAME,
-            Description="Order Management System REST API",
-            EndpointConfiguration={"types": ["REGIONAL"]},
+            name=API_NAME,
+            description="Order Management System REST API",
+            endpointConfiguration={"types": ["REGIONAL"]},
         )
         api_id = api["id"]
         print(f"{OK} REST API '{API_NAME}' created (id={api_id})")
