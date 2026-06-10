@@ -121,7 +121,7 @@
           <div class="svc">AMAZON API GATEWAY</div>
           <div class="name">REST API</div>
           <div class="desc">Single REST API routing every endpoint to its Lambda. CORS enabled for the Amplify origin.</div>
-          <span class="tag">/orders · /subscriptions · /translate · /reports</span>
+          <span class="tag">/orders · /subscriptions · /analyze-image · /reports</span>
         </div>
       </div>
     </div>
@@ -144,7 +144,7 @@
             <span class="fn">subscribe</span>
             <span class="fn">unsubscribe</span>
             <span class="fn">generatePdfSummary</span>
-            <span class="fn">translate</span>
+            <span class="fn">analyzeImage</span>
             <span class="fn">backupOrder</span>
           </div>
           <span class="tag">★ deleteOrder = required "Delete Order Code" deliverable</span>
@@ -204,9 +204,9 @@
           <span class="tag">Email protocol</span>
         </div>
         <div class="node" style="--c:var(--ai)">
-          <div class="svc">AMAZON TRANSLATE</div>
+          <div class="svc">AMAZON REKOGNITION</div>
           <div class="name">Freestyle Enhancement</div>
-          <div class="desc">On-demand translation of an order description into another language, triggered from the UI and clearly visible there.</div>
+          <div class="desc">Upload a product photo — Rekognition detects the labels and suggests the order description automatically in the UI.</div>
           <span class="tag">+5 pts · visible in UI</span>
         </div>
       </div>
@@ -266,7 +266,7 @@
         <text x="405" y="362">POST /subscriptions</text>
         <text x="405" y="420">DELETE /subscriptions</text>
         <text x="405" y="478">GET /reports/deleted-pdf</text>
-        <text x="405" y="536">POST /translate</text>
+        <text x="405" y="536">POST /analyze-image</text>
       </g>
 
       <!-- lambdas -> DynamoDB -->
@@ -296,7 +296,7 @@
       <!-- pdf -> S3 -->
       <line x1="655" y1="484" x2="1010" y2="490" stroke="#66bb6a" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
       <text x="840" y="500" font-size="8.5" fill="#7d8590">read TXT · write PDF</text>
-      <!-- translate -> Amazon Translate -->
+      <!-- analyzeImage -> Amazon Rekognition -->
       <line x1="655" y1="542" x2="730" y2="542" stroke="#42a5f5" stroke-width="1.5" marker-end="url(#ah)"/>
 
       <!-- ===== NODES ===== -->
@@ -329,7 +329,7 @@
         <rect x="470" y="461" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
         <text x="562" y="489">generatePdfSummary</text>
         <rect x="470" y="519" width="185" height="46" rx="8" fill="#161b22" stroke="#ec407a" stroke-width="2"/>
-        <text x="562" y="547">translate</text>
+        <text x="562" y="547">analyzeImage</text>
       </g>
       <text x="562" y="42" font-size="9" fill="#8b949e" text-anchor="middle">AWS Lambda — one function per operation</text>
 
@@ -344,9 +344,9 @@
       <text x="810" y="310" font-size="11.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Step Functions</text>
       <text x="810" y="325" font-size="8.5" fill="#ffa726" text-anchor="middle">⇄ Parallel: A ∥ B (async)</text>
 
-      <!-- Amazon Translate -->
+      <!-- Amazon Rekognition -->
       <rect x="730" y="519" width="160" height="46" rx="8" fill="#161b22" stroke="#42a5f5" stroke-width="2"/>
-      <text x="810" y="541" font-size="11.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Amazon Translate</text>
+      <text x="810" y="541" font-size="11.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Amazon Rekognition</text>
       <text x="810" y="556" font-size="8.5" fill="#42a5f5" text-anchor="middle">freestyle · +5 pts</text>
 
       <!-- SNS -->
@@ -386,8 +386,8 @@
       <p>UI → <code>/reports/deleted-pdf</code> → <code>generatePdfSummary</code> lists all S3 TXT backups, builds a summary PDF, stores it in S3, and returns the download URL in the response body.</p>
     </div>
     <div class="flow">
-      <h3><span class="n">5</span> Translate (freestyle)</h3>
-      <p>UI → <code>/translate</code> → <code>translate</code> Lambda → Amazon Translate → translated text back to the UI, shown next to the order description.</p>
+      <h3><span class="n">5</span> Image analysis (freestyle)</h3>
+      <p>UI → <code>/analyze-image</code> → <code>analyzeImage</code> Lambda → Amazon Rekognition <code>DetectLabels</code> → detected labels returned and suggested as the order description in the UI.</p>
     </div>
   </div>
 
@@ -396,14 +396,14 @@
     <h2>How the services integrate</h2>
     <p>The <b>Amplify</b>-hosted web client is pure presentation — it only makes HTTPS calls to <b>API Gateway</b>, which routes each request to a dedicated <b>Lambda</b> function holding all business logic. Order data persists in a single <b>DynamoDB</b> <code>orders</code> table; a Global Secondary Index lets us return all orders sorted by creation date efficiently.</p>
     <p>Deletion is the event-driven heart of the system. <code>deleteOrder</code> removes the record and immediately hands off to a <b>Step Functions</b> state machine via a non-blocking <code>StartExecution</code> call, so the user gets an instant response. The state machine's <b>Parallel</b> state simultaneously (A) publishes to <b>SNS</b> — emailing every subscriber the deleted order's details — and (B) writes a TXT backup to <b>S3</b>. Neither branch delays the delete.</p>
-    <p>Subscriptions are handled directly against the SNS topic through dedicated APIs. The PDF summary API aggregates every TXT backup in S3 into a single PDF stored back in S3, returning a download URL. The freestyle <b>Amazon Translate</b> integration adds on-demand description translation surfaced in the UI. All compute runs under the Learner Lab <b>LabRole</b>.</p>
+    <p>Subscriptions are handled directly against the SNS topic through dedicated APIs. The PDF summary API aggregates every TXT backup in S3 into a single PDF stored back in S3, returning a download URL. The freestyle <b>Amazon Rekognition</b> integration analyzes an uploaded product photo and suggests the order description in the UI. All compute runs under the Learner Lab <b>LabRole</b>.</p>
     <div class="rubric">
       <span class="r"><b>55</b> Order Management (DynamoDB + CRUD APIs)</span>
       <span class="r"><b>10</b> Notification subscription (SNS APIs)</span>
       <span class="r"><b>10</b> Async delete notification (SFn → SNS)</span>
       <span class="r"><b>5</b> S3 backup (SFn → S3)</span>
       <span class="r"><b>5</b> PDF summary (S3 + API)</span>
-      <span class="r"><b>5</b> Freestyle (Amazon Translate)</span>
+      <span class="r"><b>5</b> Freestyle (Amazon Rekognition)</span>
       <span class="r"><b>10</b> Client (Amplify web app)</span>
     </div>
   </div>
