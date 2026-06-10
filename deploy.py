@@ -44,6 +44,7 @@ API_STAGE = "prod"
 API_ROUTES = {
     "/orders": {"POST": "createOrder", "GET": "getAllOrders"},
     "/orders/{id}": {"GET": "getOrder", "PUT": "updateOrder", "DELETE": "deleteOrder"},
+    "/analyze-image": {"POST": "analyzeImage"},
 }
 
 OK = "[OK]"

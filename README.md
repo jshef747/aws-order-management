@@ -35,6 +35,7 @@ Base URL: `https://<api-id>.execute-api.us-east-1.amazonaws.com/prod` (printed b
 | GET | /orders/{id} | getOrder | — |
 | PUT | /orders/{id} | updateOrder | `{"price"?: 9.99, "description"?: "..."}` |
 | DELETE | /orders/{id} | deleteOrder | — |
+| POST | /analyze-image | analyzeImage | `{"image": "<base64 JPEG/PNG>"}` |
 
 ## Project rule
 
@@ -52,6 +53,7 @@ resource types need their own idempotent step in the script.
 | `lambdas/getOrder.py` | GET /orders/{id} — single order |
 | `lambdas/updateOrder.py` | PUT /orders/{id} — update price/description |
 | `lambdas/deleteOrder.py` | DELETE /orders/{id} — delete (Step Functions hand-off comes later) |
+| `lambdas/analyzeImage.py` | POST /analyze-image — Rekognition labels → suggested description (freestyle) |
 | `deploy.py` | Cross-platform Learner Lab sync/deploy script |
 | `architecture.html` | Full architecture diagram + unified graph |
 | `Docs/` | Assignment PDF |
@@ -59,5 +61,7 @@ resource types need their own idempotent step in the script.
 ## Upcoming phases
 
 SNS topic + subscribe/unsubscribe APIs · Step Functions delete fan-out + backupOrder ·
-S3 backups + PDF summary · Rekognition analyzeImage (freestyle — Amazon Translate is not
-permitted by the Learner Lab's LabRole; Rekognition is) · Amplify web client.
+S3 backups + PDF summary · Amplify web client.
+
+(Freestyle note: Amazon Translate is not permitted by the Learner Lab's LabRole, so the
+freestyle feature uses Amazon Rekognition instead — implemented as `analyzeImage`.)
