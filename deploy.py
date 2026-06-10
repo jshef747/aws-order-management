@@ -7,6 +7,7 @@ and it provisions / updates the whole Order Management System in YOUR account:
 
   - DynamoDB table 'orders' (PK orderId + GSI gsi-by-date)
   - All Lambda functions found in the lambdas/ folder
+  - API Gateway REST API 'orders-api' (stage 'prod') routing every endpoint
 
 Idempotent: safe to re-run any time, in either partner's Learner Lab.
 
@@ -34,6 +35,17 @@ GSI_NAME = "gsi-by-date"
 LAMBDA_RUNTIME = "python3.12"
 LAMBDA_TIMEOUT = 30
 LAMBDAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lambdas")
+
+API_NAME = "orders-api"
+API_STAGE = "prod"
+
+# Route table: path -> {HTTP method -> Lambda name}. Every architecture change that
+# adds/changes an endpoint must be reflected here (project rule).
+API_ROUTES = {
+    "/orders": {"POST": "createOrder", "GET": "getAllOrders"},
+    "/orders/{id}": {"GET": "getOrder", "PUT": "updateOrder", "DELETE": "deleteOrder"},
+    "/translate": {"POST": "translate"},
+}
 
 OK = "[OK]"
 FAIL = "[X]"
@@ -172,9 +184,133 @@ def deploy_lambdas(lambda_client, role_arn):
             print(f"{OK} Lambda '{name}' created")
 
 
+# ---------------------------------------------------------------- API Gateway
+def ensure_rest_api(apigw, lambda_client, account_id):
+    apis = apigw.get_rest_apis(limit=500)["items"]
+    api = next((a for a in apis if a["name"] == API_NAME), None)
+    if api:
+        api_id = api["id"]
+        print(f"{OK} REST API '{API_NAME}' already exists (id={api_id})")
+    else:
+        api = apigw.create_rest_api(
+            Name=API_NAME,
+            Description="Order Management System REST API",
+            EndpointConfiguration={"types": ["REGIONAL"]},
+        )
+        api_id = api["id"]
+        print(f"{OK} REST API '{API_NAME}' created (id={api_id})")
+
+    # Map existing resource paths -> resource ids.
+    resources = apigw.get_resources(restApiId=api_id, limit=500)["items"]
+    by_path = {r["path"]: r["id"] for r in resources}
+
+    def ensure_resource(path):
+        if path in by_path:
+            return by_path[path]
+        parent_path = path.rsplit("/", 1)[0] or "/"
+        part = path.rsplit("/", 1)[1]
+        parent_id = ensure_resource(parent_path) if parent_path != "/" else by_path["/"]
+        res = apigw.create_resource(restApiId=api_id, parentId=parent_id, pathPart=part)
+        by_path[path] = res["id"]
+        return res["id"]
+
+    def existing_methods(resource_id):
+        res = apigw.get_resource(restApiId=api_id, resourceId=resource_id)
+        return set((res.get("resourceMethods") or {}).keys())
+
+    for path, methods in API_ROUTES.items():
+        resource_id = ensure_resource(path)
+        have = existing_methods(resource_id)
+
+        for http_method, fn_name in methods.items():
+            if http_method in have:
+                continue
+            apigw.put_method(
+                restApiId=api_id,
+                resourceId=resource_id,
+                httpMethod=http_method,
+                authorizationType="NONE",
+            )
+            fn_arn = f"arn:aws:lambda:{REGION}:{account_id}:function:{fn_name}"
+            apigw.put_integration(
+                restApiId=api_id,
+                resourceId=resource_id,
+                httpMethod=http_method,
+                type="AWS_PROXY",
+                integrationHttpMethod="POST",
+                uri=f"arn:aws:apigateway:{REGION}:lambda:path/2015-03-31/functions/{fn_arn}/invocations",
+            )
+            print(f"{OK} Route {http_method} {path} -> {fn_name}")
+
+        if "OPTIONS" not in have:
+            add_cors_options(apigw, api_id, resource_id, methods)
+            print(f"{OK} CORS (OPTIONS) enabled on {path}")
+
+    # Allow this API to invoke each Lambda (idempotent via fixed statement id).
+    for methods in API_ROUTES.values():
+        for fn_name in set(methods.values()):
+            try:
+                lambda_client.add_permission(
+                    FunctionName=fn_name,
+                    StatementId="apigateway-invoke",
+                    Action="lambda:InvokeFunction",
+                    Principal="apigateway.amazonaws.com",
+                    SourceArn=f"arn:aws:execute-api:{REGION}:{account_id}:{api_id}/*",
+                )
+            except lambda_client.exceptions.ResourceConflictException:
+                pass
+
+    # Deploy on every run so route changes always reach the stage.
+    apigw.create_deployment(restApiId=api_id, stageName=API_STAGE)
+    invoke_url = f"https://{api_id}.execute-api.{REGION}.amazonaws.com/{API_STAGE}"
+    print(f"{OK} API deployed to stage '{API_STAGE}'")
+    print(f"\n    Invoke URL: {invoke_url}\n")
+    return invoke_url
+
+
+def add_cors_options(apigw, api_id, resource_id, methods):
+    allow_methods = ",".join(sorted(set(methods) | {"OPTIONS"}))
+    apigw.put_method(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod="OPTIONS",
+        authorizationType="NONE",
+    )
+    apigw.put_integration(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod="OPTIONS",
+        type="MOCK",
+        requestTemplates={"application/json": '{"statusCode": 200}'},
+    )
+    apigw.put_method_response(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod="OPTIONS",
+        statusCode="200",
+        responseParameters={
+            "method.response.header.Access-Control-Allow-Origin": True,
+            "method.response.header.Access-Control-Allow-Headers": True,
+            "method.response.header.Access-Control-Allow-Methods": True,
+        },
+    )
+    apigw.put_integration_response(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod="OPTIONS",
+        statusCode="200",
+        responseParameters={
+            "method.response.header.Access-Control-Allow-Origin": "'*'",
+            "method.response.header.Access-Control-Allow-Headers": "'Content-Type'",
+            "method.response.header.Access-Control-Allow-Methods": f"'{allow_methods}'",
+        },
+    )
+
+
 # ---------------------------------------------------------------- smoke test
-def smoke_test(lambda_client):
+def smoke_test(lambda_client, invoke_url):
     import json
+    import urllib.request
 
     print("\nRunning smoke test...")
     create_event = {"body": json.dumps({"price": 9.99, "description": "deploy.py smoke test order"})}
@@ -193,6 +329,26 @@ def smoke_test(lambda_client):
         sys.exit(1)
     count = json.loads(payload["body"])["count"]
     print(f"{OK} getAllOrders works ({count} order(s) in table, sorted by creation date)")
+
+    update_event = {
+        "pathParameters": {"id": order["orderId"]},
+        "body": json.dumps({"description": "deploy.py smoke test order (updated)"}),
+    }
+    resp = lambda_client.invoke(FunctionName="updateOrder", Payload=json.dumps(update_event))
+    payload = json.loads(resp["Payload"].read())
+    if payload.get("statusCode") != 200:
+        print(f"{FAIL} updateOrder smoke test failed: {payload}")
+        sys.exit(1)
+    print(f"{OK} updateOrder works (description updated)")
+
+    # One real HTTPS request to prove API Gateway routes end to end.
+    try:
+        with urllib.request.urlopen(f"{invoke_url}/orders", timeout=15) as r:
+            api_body = json.loads(r.read())
+        print(f"{OK} API Gateway works (GET {invoke_url}/orders -> {api_body['count']} order(s))")
+    except Exception as e:
+        print(f"{FAIL} API Gateway smoke test failed: {e}")
+        sys.exit(1)
 
     # Clean up the smoke-test order so the table stays tidy.
     delete_event = {"pathParameters": {"id": order["orderId"]}}
@@ -230,11 +386,13 @@ def main():
     dynamodb = session.client("dynamodb")
     iam = session.client("iam")
     lambda_client = session.client("lambda")
+    apigw = session.client("apigateway")
 
     ensure_table(dynamodb)
     role_arn = get_lab_role_arn(iam)
     deploy_lambdas(lambda_client, role_arn)
-    smoke_test(lambda_client)
+    invoke_url = ensure_rest_api(apigw, lambda_client, identity["Account"])
+    smoke_test(lambda_client, invoke_url)
 
     print("\n" + "=" * 62)
     print(" Deployment complete — your Learner Lab is in sync.")

@@ -19,7 +19,23 @@ The script (idempotent — safe to re-run any time):
 - installs `boto3` automatically if missing,
 - creates the DynamoDB `orders` table (PK `orderId` + GSI `gsi-by-date`) if needed,
 - creates/updates every Lambda in `lambdas/` (runtime Python 3.12, role `LabRole`),
-- runs a smoke test (create → list → delete an order) and prints the results.
+- creates/updates the `orders-api` REST API (API Gateway, stage `prod`, CORS enabled)
+  and prints the invoke URL,
+- runs a smoke test (create → list → update → call the API over HTTPS → delete) and
+  prints the results.
+
+## API endpoints
+
+Base URL: `https://<api-id>.execute-api.us-east-1.amazonaws.com/prod` (printed by deploy.py)
+
+| Method | Path | Lambda | Body |
+|---|---|---|---|
+| POST | /orders | createOrder | `{"price": 9.99, "description": "..."}` |
+| GET | /orders | getAllOrders | — |
+| GET | /orders/{id} | getOrder | — |
+| PUT | /orders/{id} | updateOrder | `{"price"?: 9.99, "description"?: "..."}` |
+| DELETE | /orders/{id} | deleteOrder | — |
+| POST | /translate | translate | `{"text": "...", "targetLanguage": "es"}` |
 
 ## Project rule
 
@@ -35,7 +51,14 @@ resource types need their own idempotent step in the script.
 | `lambdas/createOrder.py` | POST /orders — create order (UUID id, ISO dates) |
 | `lambdas/getAllOrders.py` | GET /orders — all orders sorted by creation date (GSI query) |
 | `lambdas/getOrder.py` | GET /orders/{id} — single order |
+| `lambdas/updateOrder.py` | PUT /orders/{id} — update price/description |
 | `lambdas/deleteOrder.py` | DELETE /orders/{id} — delete (Step Functions hand-off comes later) |
+| `lambdas/translate.py` | POST /translate — Amazon Translate (freestyle enhancement) |
 | `deploy.py` | Cross-platform Learner Lab sync/deploy script |
 | `architecture.html` | Full architecture diagram + unified graph |
 | `Docs/` | Assignment PDF |
+
+## Upcoming phases
+
+SNS topic + subscribe/unsubscribe APIs · Step Functions delete fan-out + backupOrder ·
+S3 backups + PDF summary · Amplify web client.
