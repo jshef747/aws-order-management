@@ -343,7 +343,11 @@ def smoke_test(lambda_client, invoke_url):
 
     # One real HTTPS request to prove API Gateway routes end to end.
     try:
-        with urllib.request.urlopen(f"{invoke_url}/orders", timeout=15) as r:
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(f"{invoke_url}/orders", timeout=15, context=ctx) as r:
             api_body = json.loads(r.read())
         print(f"{OK} API Gateway works (GET {invoke_url}/orders -> {api_body['count']} order(s))")
     except Exception as e:
