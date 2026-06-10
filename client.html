@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<!--
+  Order Management System - web client.
+  Single self-contained file: HTML + CSS + vanilla JS, no build step.
+  Talks to the orders-api API Gateway deployed by deploy.py.
+  Set the API base URL via the Settings panel (saved in localStorage),
+  using the invoke URL printed by deploy.py each Learner Lab session.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Order Management</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    /* Amazon-inspired palette */
+    --navy:       #131921;   /* header */
+    --navy-2:     #232F3E;   /* sub-header */
+    --orange:     #FF9900;
+    --orange-d:   #E47911;
+    --yellow:     #FFD814;   /* buy button */
+    --yellow-d:   #F7CA00;
+    --page:       #EAEDED;   /* page bg */
+    --white:      #FFFFFF;
+    --ink:        #0F1111;
+    --muted:      #565959;
+    --link:       #007185;
+    --price-red:  #B12704;
+    --success:    #067D62;
+    --danger:     #B12704;
+    --border:     #D5D9D9;
+    --radius:     8px;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: Inter, "Amazon Ember", Arial, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    line-height: 1.45;
+    font-size: 14px;
+  }
+  a { color: var(--link); text-decoration: none; }
+  .mono { font-family: var(--mono); }
+  svg { display: block; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--orange); outline-offset: 1px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+  [hidden] { display: none !important; }
+
+  /* ================= HEADER ================= */
+  .header {
+    background: var(--navy);
+    color: #fff;
+    padding: 10px 18px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .logo { display: flex; align-items: baseline; gap: 2px; cursor: pointer; padding: 6px 8px; border: 1px solid transparent; border-radius: 4px; }
+  .logo:hover { border-color: #fff; }
+  .logo .name { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+  .logo .smile { color: var(--orange); font-weight: 800; }
+  .searchbar {
+    flex: 1; display: flex; height: 40px; border-radius: 6px; overflow: hidden;
+    background: #fff;
+  }
+  .searchbar input {
+    flex: 1; border: none; outline: none; font: inherit; font-size: 14.5px; padding: 0 12px; color: var(--ink);
+  }
+  .searchbar .go {
+    width: 48px; border: none; cursor: pointer; display: grid; place-items: center;
+    background: var(--orange); color: var(--navy);
+  }
+  .searchbar .go:hover { background: var(--orange-d); }
+  .header .navlink {
+    padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; cursor: pointer; line-height: 1.25;
+    background: none; color: #fff; font: inherit; text-align: left;
+  }
+  .header .navlink:hover { border-color: #fff; }
+  .header .navlink .top { font-size: 11px; color: #CCC; }
+  .header .navlink .bottom { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #8B9298; flex: none; }
+  .conn-dot.ok  { background: #3FC380; }
+  .conn-dot.bad { background: #FF6161; }
+
+  /* sub-nav */
+  .subnav {
+    background: var(--navy-2); color: #E6E6E6; font-size: 13px;
+    display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap;
+  }
+  .subnav .item {
+    padding: 5px 9px; border: 1px solid transparent; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; background: none; color: inherit; font: inherit;
+  }
+  .subnav .item:hover { border-color: #fff; color: #fff; }
+  .subnav .item.active { color: #fff; font-weight: 600; border-color: #fff; }
+  .subnav .spacer { flex: 1; }
+  .subnav .deal { color: var(--orange); font-weight: 700; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px 16px 70px; }
+
+  /* ================= HERO STRIP ================= */
+  .hero {
+    border-radius: var(--radius);
+    background: linear-gradient(100deg, #232F3E 0%, #37475A 70%, #485769 100%);
+    color: #fff; padding: 22px 26px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  .hero h1 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
+  .hero p { margin: 0; color: #C8D1DA; font-size: 13.5px; }
+  .hero .spacer { flex: 1; }
+  .hero-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hstat {
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 10px 16px; min-width: 110px;
+  }
+  .hstat .v { font-size: 19px; font-weight: 800; }
+  .hstat .v.money { color: var(--orange); }
+  .hstat .k { font-size: 11.5px; color: #B9C4CE; }
+
+  /* ================= CARDS / PANELS ================= */
+  .panel {
+    background: var(--white); border-radius: var(--radius); border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .panel-head { padding: 14px 18px 0; }
+  .panel-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  .panel-head .sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .panel-body { padding: 14px 18px 18px; }
+
+  /* ================= AI / image analysis ================= */
+  .ai-grid { display: grid; grid-template-columns: 230px 1fr; gap: 18px; align-items: start; }
+  .dropzone {
+    border: 1.5px dashed #AAB7B8; border-radius: var(--radius); background: #FAFAFA;
+    min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    color: var(--muted); text-align: center; cursor: pointer; padding: 14px; width: 100%;
+    font: inherit;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--orange); background: #FFF8EE; }
+  .dropzone b { color: var(--ink); font-size: 13px; }
+  .dz-icon { color: var(--orange-d); }
+  .dz-preview { max-width: 100%; max-height: 130px; border-radius: 6px; border: 1px solid var(--border); }
+  .ai-placeholder { color: var(--muted); font-size: 13.5px; padding: 8px 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #F0F2F2; border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; font-size: 13px; font-weight: 600;
+  }
+  .chip .pct { font-weight: 500; color: var(--muted); font-size: 12px; }
+  .chip.top { background: #FEF3E2; border-color: #F5C588; }
+  .suggestbox {
+    background: #F7FEFA; border: 1px solid #BBE4D4; border-radius: var(--radius);
+    padding: 12px 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .suggestbox .lab { font-size: 11.5px; color: var(--success); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+  .suggestbox .txt { font-size: 14px; font-weight: 600; }
+  .ai-error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+
+  /* ================= BUTTONS (Amazon pills) ================= */
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+    border-radius: 999px; padding: 8px 16px; border: 1px solid var(--border);
+    background: #fff; color: var(--ink);
+    box-shadow: 0 2px 5px rgba(15,17,17,.08);
+    transition: background .12s;
+    display: inline-flex; align-items: center; gap: 7px; justify-content: center;
+  }
+  .btn:hover { background: #F7FAFA; }
+  .btn.buy   { background: var(--yellow); border-color: var(--yellow-d); }
+  .btn.buy:hover { background: var(--yellow-d); }
+  .btn.cart  { background: var(--orange); border-color: var(--orange-d); color: var(--navy); font-weight: 600; }
+  .btn.cart:hover { background: var(--orange-d); }
+  .btn.danger { color: var(--danger); }
+  .btn.danger:hover { background: #FBF3F2; }
+  .btn.danger-fill { background: var(--price-red); border-color: #8E1F03; color: #fff; }
+  .btn.danger-fill:hover { background: #8E1F03; }
+  .btn.sm { padding: 6px 13px; font-size: 12.5px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .spinner {
+    width: 14px; height: 14px; border-radius: 50%; flex: none;
+    border: 2px solid rgba(15,17,17,.25); border-top-color: var(--ink);
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ================= TOOLBAR ================= */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 2px 12px;
+  }
+  .toolbar .results { font-size: 13.5px; color: var(--muted); }
+  .toolbar .results b { color: var(--ink); }
+  .toolbar .spacer { flex: 1; }
+  select.sort {
+    font: inherit; font-size: 13px; padding: 7px 11px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 8px; background: #F0F2F2;
+  }
+
+  /* ================= PRODUCT GRID ================= */
+  .grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  }
+  .product {
+    background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: box-shadow .15s;
+  }
+  .product:hover { box-shadow: 0 4px 14px rgba(15,17,17,.14); }
+  .thumb {
+    height: 150px; display: grid; place-items: center; background: #F7F7F7;
+    border-bottom: 1px solid #EEE; color: #B5BDC4;
+  }
+  .p-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .p-title { font-size: 14px; font-weight: 500; color: var(--ink); line-height: 1.35;
+    background: none; border: none; padding: 0; text-align: left; font-family: inherit; cursor: pointer;
+    overflow-wrap: anywhere; }
+  .p-title:hover { color: var(--orange-d); }
+  .p-id { font-size: 11.5px; color: var(--muted); }
+  .p-id .copy-id { color: var(--link); cursor: pointer; background: none; border: none; padding: 0; font-size: inherit; }
+  .p-id .copy-id:hover { color: var(--orange-d); text-decoration: underline; }
+  .p-when { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+  .p-price { font-size: 12px; color: var(--ink); margin-top: 2px; }
+  .p-price .sym { vertical-align: top; position: relative; top: 2px; }
+  .p-price .whole { font-size: 22px; font-weight: 600; }
+  .p-meta { font-size: 12px; color: var(--muted); }
+  .p-meta .prime { color: var(--link); font-weight: 700; }
+  .p-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 10px; }
+  .p-actions .btn { flex: 1; }
+
+  /* "new order" tile */
+  .product.add-tile {
+    border: 2px dashed #C8CDD1; background: #FBFCFC; align-items: center; justify-content: center;
+    min-height: 290px; cursor: pointer; color: var(--muted); gap: 10px; font: inherit;
+  }
+  .product.add-tile:hover { border-color: var(--orange); background: #FFF8EE; box-shadow: none; }
+  .add-circle {
+    width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--yellow); color: var(--navy);
+  }
+  .product.add-tile b { color: var(--ink); font-size: 14px; }
+
+  /* skeletons */
+  .product.skeleton { min-height: 290px; }
+  .sk { background: linear-gradient(90deg, #EEF1F1 25%, #F8FAFA 50%, #EEF1F1 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .skeleton .thumb { border: none; }
+  .skeleton .l1 { height: 14px; width: 85%; }
+  .skeleton .l2 { height: 11px; width: 55%; }
+  .skeleton .l3 { height: 24px; width: 40%; }
+
+  /* empty states */
+  .empty {
+    grid-column: 1 / -1; background: var(--white); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 44px 20px; text-align: center; color: var(--muted);
+  }
+  .empty .big { color: #B5BDC4; display: flex; justify-content: center; margin-bottom: 10px; }
+  .empty b { color: var(--ink); display: block; font-size: 16px; margin-bottom: 4px; }
+
+  /* ================= SETTINGS ================= */
+  .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+  .settings-row .input { flex: 1; min-width: 240px; width: auto; }
+  .test-result { font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 7px; }
+  .test-result.ok  { color: var(--success); }
+  .test-result.bad { color: var(--danger); }
+
+  /* ================= MODALS ================= */
+  .overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(15,17,17,.5);
+    display: grid; place-items: center; padding: 18px;
+  }
+  .modal {
+    width: 100%; max-width: 430px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 18px 50px -18px rgba(15,17,17,.45);
+    max-height: 90vh; overflow: auto;
+  }
+  .m-head { padding: 14px 18px; border-bottom: 1px solid #EEE; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 9px; }
+  .m-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .m-foot { padding: 14px 18px; border-top: 1px solid #EEE; display: flex; gap: 10px; justify-content: flex-end; }
+  .field label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+  .field .req { color: var(--price-red); }
+  .input, textarea.input {
+    width: 100%; font: inherit; font-size: 14px; padding: 9px 11px;
+    border: 1px solid #888C8C; border-radius: 7px; outline: none;
+    box-shadow: inset 0 1px 2px rgba(15,17,17,.07);
+  }
+  .input:focus, textarea.input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px #FBE3B8; }
+  .input.invalid, textarea.input.invalid { border-color: var(--price-red); }
+  .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .field .err { font-size: 12px; color: var(--price-red); margin-top: 4px; }
+  .warn-line { font-size: 13.5px; }
+  .warn-line b { font-weight: 700; overflow-wrap: anywhere; }
+
+  /* ================= TOASTS ================= */
+  .toasts {
+    position: fixed; top: 16px; right: 16px; z-index: 200;
+    display: flex; flex-direction: column; gap: 10px; max-width: 360px;
+  }
+  .toast {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--success);
+    border-radius: 8px; padding: 11px 15px; font-size: 13.5px;
+    box-shadow: 0 4px 14px rgba(15,17,17,.18);
+  }
+  .toast.error { border-left-color: var(--danger); }
+  .toast .ic { color: var(--success); flex: none; margin-top: 1px; }
+  .toast.error .ic { color: var(--danger); }
+
+  /* ================= RESPONSIVE ================= */
+  @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 760px)  {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .ai-grid { grid-template-columns: 1fr; }
+    .header { flex-wrap: wrap; }
+    .searchbar { order: 3; flex-basis: 100%; }
+  }
+  @media (max-width: 460px)  { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+  <!-- ============ HEADER ============ -->
+  <header class="header">
+    <div class="logo" id="logo" title="Reload orders">
+      <span class="name">orders</span><span class="smile">.aws</span>
+    </div>
+
+    <div class="searchbar">
+      <input id="search" placeholder="Search your orders…" aria-label="Search orders" />
+      <button class="go" id="searchBtn" aria-label="Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      </button>
+    </div>
+
+    <button class="navlink" id="statusLink" title="API connection status">
+      <div class="top">API status</div>
+      <div class="bottom"><span class="conn-dot" id="connDot"></span> <span id="connText">Not configured</span></div>
+    </button>
+    <button class="navlink" id="settingsLink" aria-expanded="false">
+      <div class="top">Settings</div>
+      <div class="bottom">API URL ▾</div>
+    </button>
+    <button class="navlink" id="cartLink" title="Total orders">
+      <div class="top">Total</div>
+      <div class="bottom" style="color:var(--orange)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 3h2l2.5 12.5a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 7H6"/></svg>
+        <span id="cartCount">— orders</span>
+      </div>
+    </button>
+  </header>
+
+  <!-- sub-nav: sort shortcuts -->
+  <nav class="subnav" aria-label="Sort orders">
+    <button class="item" data-sort="newest">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      All orders
+    </button>
+    <button class="item" data-sort="oldest">Oldest</button>
+    <button class="item" data-sort="price-desc">Price: high to low</button>
+    <button class="item" data-sort="price-asc">Price: low to high</button>
+    <div class="spacer"></div>
+    <button class="item deal" id="aiLink">✦ Analyze image with Rekognition</button>
+  </nav>
+
+  <div class="wrap">
+
+    <!-- ============ SETTINGS PANEL ============ -->
+    <section class="panel" id="settingsPanel" hidden>
+      <div class="panel-head"><h2 style="font-size:16px">API endpoint</h2>
+        <div class="sub">Paste the invoke URL printed by deploy.py — saved in this browser</div></div>
+      <div class="panel-body">
+        <div class="settings-row">
+          <input class="input mono" id="apiUrlInput"
+                 placeholder="https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod"
+                 autocomplete="off" spellcheck="false" />
+          <button class="btn" id="testBtn">Test</button>
+          <button class="btn cart" id="saveBtn">Save</button>
+        </div>
+        <div class="test-result" id="testResult" hidden></div>
+      </div>
+    </section>
+
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div>
+        <h1>Your Orders</h1>
+        <p>Event-driven serverless Order Management · us-east-1</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="hero-stats">
+        <div class="hstat"><div class="v" id="statCount">—</div><div class="k">total orders</div></div>
+        <div class="hstat"><div class="v money" id="statTotal">—</div><div class="k">total value</div></div>
+        <div class="hstat"><div class="v money" id="statAvg">—</div><div class="k">avg order</div></div>
+        <div class="hstat"><div class="v" id="statNewest">—</div><div class="k">newest order</div></div>
+      </div>
+    </section>
+
+    <!-- ============ IMAGE ANALYSIS ============ -->
+    <section class="panel" id="aiPanel">
+      <div class="panel-head">
+        <h2>Analyze a product image</h2>
+        <div class="sub">Amazon Rekognition detects labels and suggests an order description</div>
+      </div>
+      <div class="panel-body">
+        <div class="ai-grid">
+          <div>
+            <button class="dropzone" id="dropzone" aria-label="Upload an image to analyze">
+              <span class="dz-icon" id="dzIcon">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+              </span>
+              <b id="dzTitle">Drop image here or browse</b>
+              <span style="font-size:12px" id="dzSub">JPEG / PNG · up to 5 MB</span>
+              <img class="dz-preview" id="dzPreview" alt="Selected image preview" hidden />
+            </button>
+            <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden />
+          </div>
+          <div id="aiResults">
+            <div class="ai-placeholder">Upload an image and Rekognition's labels will appear here.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TOOLBAR ============ -->
+    <div class="toolbar">
+      <div class="results" id="resultsLine">Loading…</div>
+      <div class="spacer"></div>
+      <select class="sort" id="sortSelect" aria-label="Sort orders">
+        <option value="newest">Sort by: Newest first</option>
+        <option value="oldest">Sort by: Oldest first</option>
+        <option value="price-desc">Sort by: Price high → low</option>
+        <option value="price-asc">Sort by: Price low → high</option>
+      </select>
+    </div>
+
+    <!-- ============ PRODUCT GRID ============ -->
+    <div class="grid" id="grid" aria-live="polite"></div>
+
+  </div>
+
+  <!-- ============ MODALS ============ -->
+  <div class="overlay" id="orderOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+      <div class="m-head" id="orderModalTitle">Create new order</div>
+      <form id="orderForm" novalidate>
+        <div class="m-body">
+          <div class="field">
+            <label for="descInput">Description <span class="req">*</span></label>
+            <textarea class="input" id="descInput" rows="3" required></textarea>
+            <div class="hint" id="descHint">Tip: analyze an image above to auto-fill this field.</div>
+            <div class="err" id="descErr" hidden></div>
+          </div>
+          <div class="field">
+            <label for="priceInput">Price (USD) <span class="req">*</span></label>
+            <input class="input mono" id="priceInput" inputmode="decimal" autocomplete="off" required />
+            <div class="err" id="priceErr" hidden></div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button type="button" class="btn" id="orderCancel">Cancel</button>
+          <button type="submit" class="btn buy" id="orderSubmit">Place order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="overlay" id="deleteOverlay" hidden>
+    <div class="modal" style="max-width:410px" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+      <div class="m-head" id="deleteModalTitle">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B12704" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+        Delete this order?
+      </div>
+      <div class="m-body">
+        <div class="warn-line" id="deleteText"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn" id="deleteCancel">Cancel</button>
+        <button class="btn danger-fill" id="deleteConfirm">Delete order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- toasts -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- state ---------------- */
+  const LS_KEY = "oms_api_base";
+  const state = {
+    apiBase: (localStorage.getItem(LS_KEY) || "").replace(/\/+$/, ""),
+    orders: [],
+    filter: "",
+    sort: "newest",
+    loading: false,
+    connected: null,          // null = unknown, true/false
+    editingId: null,          // orderId when editing, null when creating
+    deletingOrder: null,      // order object pending deletion
+    aiSuggestion: "",
+    lastFocus: null,          // element to restore focus to after modal closes
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const fmtMoney = (n) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+  function relTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return "—";
+    const s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + "m ago";
+    if (s < 86400) return Math.floor(s / 3600) + "h ago";
+    if (s < 172800) return "yesterday";
+    return Math.floor(s / 86400) + " days ago";
+  }
+
+  function esc(str) {
+    const div = document.createElement("div");
+    div.textContent = String(str);
+    return div.innerHTML;
+  }
+
+  /* ---------------- api ---------------- */
+  async function call(method, path, body) {
+    if (!state.apiBase) throw new Error("API URL is not configured — open Settings.");
+    const opts = { method, headers: { "Content-Type": "application/json" } };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    let res;
+    try {
+      res = await fetch(state.apiBase + path, opts);
+    } catch (e) {
+      setConnected(false);
+      throw new Error("Network error — check the API URL and your connection.");
+    }
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* non-JSON body */ }
+    if (!res.ok) {
+      if (res.status >= 500) setConnected(false);
+      const msg = (data && (data.error || data.message)) || ("HTTP " + res.status);
+      throw new Error(msg);
+    }
+    setConnected(true);
+    return data;
+  }
+  const api = {
+    get:  (p)    => call("GET", p),
+    post: (p, b) => call("POST", p, b),
+    put:  (p, b) => call("PUT", p, b),
+    del:  (p)    => call("DELETE", p),
+  };
+
+  /* ---------------- connection status ---------------- */
+  function setConnected(ok) {
+    state.connected = ok;
+    const dot = $("connDot"), txt = $("connText");
+    dot.classList.remove("ok", "bad");
+    if (!state.apiBase) { txt.textContent = "Not configured"; return; }
+    if (ok === true)  { dot.classList.add("ok");  txt.textContent = "Connected"; }
+    else if (ok === false) { dot.classList.add("bad"); txt.textContent = "Offline"; }
+    else { txt.textContent = "Unknown"; }
+  }
+
+  /* ---------------- toasts ---------------- */
+  function toast(message, isError) {
+    const el = document.createElement("div");
+    el.className = "toast" + (isError ? " error" : "");
+    el.innerHTML =
+      '<span class="ic">' +
+      (isError
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>') +
+      "</span><span>" + esc(message) + "</span>";
+    $("toasts").appendChild(el);
+    setTimeout(() => el.remove(), isError ? 5000 : 3500);
+  }
+
+  /* ---------------- rendering ---------------- */
+  function visibleOrders() {
+    const q = state.filter.trim().toLowerCase();
+    let list = state.orders;
+    if (q) {
+      list = list.filter(
+        (o) =>
+          (o.description || "").toLowerCase().includes(q) ||
+          (o.orderId || "").toLowerCase().includes(q)
+      );
+    }
+    const by = {
+      newest:     (a, b) => (b.creationDate || "").localeCompare(a.creationDate || ""),
+      oldest:     (a, b) => (a.creationDate || "").localeCompare(b.creationDate || ""),
+      "price-desc": (a, b) => (b.price || 0) - (a.price || 0),
+      "price-asc":  (a, b) => (a.price || 0) - (b.price || 0),
+    }[state.sort];
+    return [...list].sort(by);
+  }
+
+  function renderStats() {
+    const n = state.orders.length;
+    $("cartCount").textContent = n + (n === 1 ? " order" : " orders");
+    $("statCount").textContent = n;
+    if (n === 0) {
+      $("statTotal").textContent = "$0";
+      $("statAvg").textContent = "—";
+      $("statNewest").textContent = "—";
+      return;
+    }
+    const total = state.orders.reduce((s, o) => s + (Number(o.price) || 0), 0);
+    $("statTotal").textContent = fmtMoney(total);
+    $("statAvg").textContent = fmtMoney(total / n);
+    const newest = state.orders.reduce((a, b) =>
+      (a.creationDate || "") > (b.creationDate || "") ? a : b);
+    $("statNewest").textContent = relTime(newest.creationDate);
+  }
+
+  function priceHtml(p) {
+    const num = Number(p) || 0;
+    const [whole, cents] = num.toFixed(2).split(".");
+    return (
+      '<span class="sym">$</span><span class="whole">' +
+      Number(whole).toLocaleString("en-US") +
+      '</span><span class="sym">' + cents + "</span>"
+    );
+  }
+
+  const THUMB_SVG =
+    '<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg>';
+
+  function orderCard(o) {
+    const short = (o.orderId || "").slice(0, 8);
+    return (
+      '<article class="product" data-id="' + esc(o.orderId) + '">' +
+      '<div class="thumb">' + THUMB_SVG + "</div>" +
+      '<div class="p-body">' +
+      '<button class="p-title" data-act="edit" title="Edit order">' + esc(o.description || "(no description)") + "</button>" +
+      '<div class="p-id">Order <button class="copy-id mono" data-act="copy" title="Copy full order ID">#' + esc(short) + "</button></div>" +
+      '<div class="p-when">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>' +
+      "created " + esc(relTime(o.creationDate)) + "</div>" +
+      '<div class="p-price">' + priceHtml(o.price) + "</div>" +
+      '<div class="p-meta"><span class="prime">✓ saved</span> in DynamoDB · us-east-1</div>' +
+      '<div class="p-actions">' +
+      '<button class="btn sm" data-act="edit">Edit</button>' +
+      '<button class="btn sm danger" data-act="delete">Delete</button>' +
+      "</div></div></article>"
+    );
+  }
+
+  const ADD_TILE =
+    '<button class="product add-tile" id="addTile">' +
+    '<span class="add-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>' +
+    "<b>Create new order</b>" +
+    '<span style="font-size:12px">Add description &amp; price</span>' +
+    "</button>";
+
+  function skeletons(n) {
+    let html = "";
+    for (let i = 0; i < n; i++) {
+      html +=
+        '<div class="product skeleton"><div class="thumb sk"></div>' +
+        '<div class="p-body"><div class="sk l1"></div><div class="sk l2"></div><div class="sk l3"></div></div></div>';
+    }
+    return html;
+  }
+
+  function emptyState() {
+    const icon =
+      '<div class="big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg></div>';
+    if (!state.apiBase) {
+      return (
+        '<div class="empty">' + icon +
+        "<b>No API configured</b>Open Settings (top right) and paste the invoke URL printed by deploy.py.</div>"
+      );
+    }
+    if (state.filter.trim()) {
+      return (
+        '<div class="empty">' + icon +
+        "<b>No orders match “" + esc(state.filter.trim()) + "”</b>Try a different search, or clear it to see all orders.</div>"
+      );
+    }
+    return (
+      '<div class="empty">' + icon +
+      "<b>No orders yet</b>Create your first order with the button above, or analyze a product image.</div>"
+    );
+  }
+
+  function render() {
+    const grid = $("grid");
+    if (state.loading) {
+      $("resultsLine").textContent = "Loading orders…";
+      grid.innerHTML = ADD_TILE + skeletons(7);
+      bindAddTile();
+      return;
+    }
+    const vis = visibleOrders();
+    const q = state.filter.trim();
+    $("resultsLine").innerHTML = q
+      ? "<b>" + vis.length + "</b> of <b>" + state.orders.length + "</b> results for <b>“" + esc(q) + "”</b>"
+      : "<b>" + vis.length + "</b> " + (vis.length === 1 ? "order" : "orders");
+
+    if (vis.length === 0 && !q && state.orders.length === 0) {
+      grid.innerHTML = ADD_TILE + emptyState();
+    } else if (vis.length === 0) {
+      grid.innerHTML = ADD_TILE + emptyState();
+    } else {
+      grid.innerHTML = ADD_TILE + vis.map(orderCard).join("");
+    }
+    bindAddTile();
+    renderStats();
+
+    // sync sort UI ("All orders", index 0, highlights only for the default sort)
+    document.querySelectorAll(".subnav .item[data-sort]").forEach((el, i) => {
+      el.classList.toggle(
+        "active",
+        i === 0 ? state.sort === "newest" : el.dataset.sort === state.sort
+      );
+    });
+    $("sortSelect").value = state.sort;
+  }
+
+  function bindAddTile() {
+    const t = $("addTile");
+    if (t) t.addEventListener("click", () => openOrderModal(null));
+  }
+
+  /* ---------------- data loading ---------------- */
+  async function loadOrders() {
+    if (!state.apiBase) { render(); return; }
+    state.loading = true;
+    render();
+    try {
+      const data = await api.get("/orders");
+      state.orders = (data && data.orders) || [];
+    } catch (e) {
+      toast("Failed to load orders: " + e.message, true);
+      state.orders = [];
+    }
+    state.loading = false;
+    render();
+  }
+
+  /* ---------------- grid actions (event delegation) ---------------- */
+  $("grid").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-act]");
+    if (!btn) return;
+    const card = btn.closest(".product[data-id]");
+    if (!card) return;
+    const order = state.orders.find((o) => o.orderId === card.dataset.id);
+    if (!order) return;
+    const act = btn.dataset.act;
+    if (act === "edit") openOrderModal(order);
+    else if (act === "delete") openDeleteModal(order);
+    else if (act === "copy") {
+      navigator.clipboard && navigator.clipboard.writeText(order.orderId)
+        .then(() => toast("Order ID copied"))
+        .catch(() => toast("Could not copy", true));
+    }
+  });
+
+  /* ---------------- search & sort ---------------- */
+  let searchTimer;
+  $("search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.filter = e.target.value;
+      render();
+    }, 150);
+  });
+  $("searchBtn").addEventListener("click", () => {
+    state.filter = $("search").value;
+    render();
+  });
+  $("sortSelect").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    render();
+  });
+  document.querySelectorAll(".subnav .item[data-sort]").forEach((el) => {
+    el.addEventListener("click", () => {
+      state.sort = el.dataset.sort;
+      render();
+    });
+  });
+  $("logo").addEventListener("click", loadOrders);
+  $("cartLink").addEventListener("click", () =>
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }));
+  $("statusLink").addEventListener("click", loadOrders);
+
+  /* ---------------- settings ---------------- */
+  function toggleSettings(show) {
+    const panel = $("settingsPanel");
+    const wanted = show === undefined ? panel.hidden : show;
+    panel.hidden = !wanted;
+    $("settingsLink").setAttribute("aria-expanded", String(wanted));
+    if (wanted) {
+      $("apiUrlInput").value = state.apiBase;
+      $("apiUrlInput").focus();
+    }
+  }
+  $("settingsLink").addEventListener("click", () => toggleSettings());
+
+  $("saveBtn").addEventListener("click", () => {
+    const url = $("apiUrlInput").value.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/.+/.test(url)) {
+      showTestResult(false, "Enter a full URL starting with https://");
+      return;
+    }
+    state.apiBase = url;
+    localStorage.setItem(LS_KEY, url);
+    setConnected(null);
+    toast("API URL saved");
+    toggleSettings(false);
+    loadOrders();
+  });
+
+  function showTestResult(ok, msg) {
+    const el = $("testResult");
+    el.hidden = false;
+    el.className = "test-result " + (ok ? "ok" : "bad");
+    el.innerHTML =
+      (ok
+        ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>'
+        : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6L6 18M6 6l12 12"/></svg>') +
+      esc(msg);
+  }
+
+  $("testBtn").addEventListener("click", async () => {
+    const url = $("apiUrlInput").value.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/.+/.test(url)) {
+      showTestResult(false, "Enter a full URL starting with https://");
+      return;
+    }
+    const btn = $("testBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Testing';
+    try {
+      const res = await fetch(url + "/orders");
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && Array.isArray(data.orders)) {
+        showTestResult(true, "Connected — " + data.orders.length + " orders found");
+      } else {
+        showTestResult(false, "Reached the server but got HTTP " + res.status);
+      }
+    } catch (e) {
+      showTestResult(false, "Could not reach the API (network/CORS error)");
+    }
+    btn.disabled = false;
+    btn.textContent = "Test";
+  });
+
+  /* ---------------- create / edit modal ---------------- */
+  function openOrderModal(order) {
+    state.editingId = order ? order.orderId : null;
+    state.lastFocus = document.activeElement;
+    $("orderModalTitle").textContent = order ? "Edit order" : "Create new order";
+    $("orderSubmit").textContent = order ? "Save changes" : "Place order";
+    $("descInput").value = order ? order.description || "" : state.aiSuggestion || "";
+    $("priceInput").value = order ? String(order.price) : "";
+    state.aiSuggestion = "";
+    clearFieldErrors();
+    $("orderOverlay").hidden = false;
+    $("descInput").focus();
+  }
+  function closeOrderModal() {
+    $("orderOverlay").hidden = true;
+    if (state.lastFocus) state.lastFocus.focus();
+  }
+  function clearFieldErrors() {
+    ["descErr", "priceErr"].forEach((id) => { $(id).hidden = true; $(id).textContent = ""; });
+    $("descInput").classList.remove("invalid");
+    $("priceInput").classList.remove("invalid");
+  }
+  function validateOrderForm() {
+    clearFieldErrors();
+    let firstBad = null;
+    const desc = $("descInput").value.trim();
+    if (!desc) {
+      $("descErr").textContent = "Description is required.";
+      $("descErr").hidden = false;
+      $("descInput").classList.add("invalid");
+      firstBad = firstBad || $("descInput");
+    }
+    const priceRaw = $("priceInput").value.trim();
+    const price = Number(priceRaw);
+    if (!priceRaw || !isFinite(price) || price <= 0) {
+      $("priceErr").textContent = "Enter a price greater than 0.";
+      $("priceErr").hidden = false;
+      $("priceInput").classList.add("invalid");
+      firstBad = firstBad || $("priceInput");
+    }
+    if (firstBad) { firstBad.focus(); return null; }
+    return { description: desc, price: price };
+  }
+  $("descInput").addEventListener("blur", () => {
+    if (!$("descInput").value.trim()) {
+      $("descErr").textContent = "Description is required.";
+      $("descErr").hidden = false;
+      $("descInput").classList.add("invalid");
+    }
+  });
+  $("priceInput").addEventListener("blur", () => {
+    const v = $("priceInput").value.trim();
+    if (v && (!isFinite(Number(v)) || Number(v) <= 0)) {
+      $("priceErr").textContent = "Enter a price greater than 0.";
+      $("priceErr").hidden = false;
+      $("priceInput").classList.add("invalid");
+    }
+  });
+
+  $("orderForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const body = validateOrderForm();
+    if (!body) return;
+    const btn = $("orderSubmit");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> ' + (state.editingId ? "Saving…" : "Placing…");
+    try {
+      if (state.editingId) {
+        await api.put("/orders/" + encodeURIComponent(state.editingId), body);
+        toast("Order updated");
+      } else {
+        await api.post("/orders", body);
+        toast("Order placed successfully");
+      }
+      closeOrderModal();
+      await loadOrders();
+    } catch (e) {
+      toast(e.message, true);
+    }
+    btn.disabled = false;
+    btn.textContent = label;
+  });
+  $("orderCancel").addEventListener("click", closeOrderModal);
+
+  /* ---------------- delete modal ---------------- */
+  function openDeleteModal(order) {
+    state.deletingOrder = order;
+    state.lastFocus = document.activeElement;
+    $("deleteText").innerHTML =
+      "<b>" + esc(order.description || "(no description)") + "</b> " +
+      '<span class="mono" style="color:var(--muted)">(#' + esc((order.orderId || "").slice(0, 8)) + ")</span> " +
+      "will be permanently removed. This cannot be undone.";
+    $("deleteOverlay").hidden = false;
+    $("deleteCancel").focus();
+  }
+  function closeDeleteModal() {
+    $("deleteOverlay").hidden = true;
+    state.deletingOrder = null;
+    if (state.lastFocus) state.lastFocus.focus();
+  }
+  $("deleteCancel").addEventListener("click", closeDeleteModal);
+  $("deleteConfirm").addEventListener("click", async () => {
+    const order = state.deletingOrder;
+    if (!order) return;
+    const btn = $("deleteConfirm");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Deleting…';
+    try {
+      await api.del("/orders/" + encodeURIComponent(order.orderId));
+      toast("Order deleted");
+      closeDeleteModal();
+      await loadOrders();
+    } catch (e) {
+      toast(e.message, true);
+    }
+    btn.disabled = false;
+    btn.textContent = "Delete order";
+  });
+
+  /* ---------------- modal shared behavior ---------------- */
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (!$("orderOverlay").hidden) closeOrderModal();
+    else if (!$("deleteOverlay").hidden) closeDeleteModal();
+  });
+  [$("orderOverlay"), $("deleteOverlay")].forEach((ov) => {
+    ov.addEventListener("mousedown", (ev) => {
+      if (ev.target === ov) {
+        if (ov === $("orderOverlay")) closeOrderModal();
+        else closeDeleteModal();
+      }
+    });
+  });
+
+  /* ---------------- image analysis ---------------- */
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  $("aiLink").addEventListener("click", () => {
+    $("aiPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("dropzone").focus();
+  });
+  $("dropzone").addEventListener("click", () => $("fileInput").click());
+  $("dropzone").addEventListener("dragover", (ev) => {
+    ev.preventDefault();
+    $("dropzone").classList.add("dragover");
+  });
+  $("dropzone").addEventListener("dragleave", () => $("dropzone").classList.remove("dragover"));
+  $("dropzone").addEventListener("drop", (ev) => {
+    ev.preventDefault();
+    $("dropzone").classList.remove("dragover");
+    const f = ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (f) handleImage(f);
+  });
+  $("fileInput").addEventListener("change", (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (f) handleImage(f);
+    ev.target.value = "";
+  });
+
+  function aiMessage(html) { $("aiResults").innerHTML = html; }
+
+  function handleImage(file) {
+    if (!/^image\/(jpeg|png)$/.test(file.type)) {
+      aiMessage('<div class="ai-error">Only JPEG or PNG images are supported.</div>');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      aiMessage('<div class="ai-error">Image is larger than 5 MB — Rekognition’s limit. Pick a smaller file.</div>');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      $("dzPreview").src = dataUrl;
+      $("dzPreview").hidden = false;
+      $("dzIcon").hidden = true;
+      $("dzTitle").textContent = file.name;
+      $("dzSub").textContent = "Click to choose a different image";
+      const b64 = String(dataUrl).split(",")[1];
+      analyzeImage(b64);
+    };
+    reader.onerror = () => aiMessage('<div class="ai-error">Could not read the file.</div>');
+    reader.readAsDataURL(file);
+  }
+
+  async function analyzeImage(b64) {
+    aiMessage(
+      '<div class="ai-placeholder" style="display:flex;align-items:center;gap:9px">' +
+      '<span class="spinner"></span> Analyzing with Rekognition…</div>'
+    );
+    try {
+      const data = await api.post("/analyze-image", { image: b64 });
+      renderAiResults(data);
+    } catch (e) {
+      aiMessage('<div class="ai-error">Analysis failed: ' + esc(e.message) + "</div>");
+    }
+  }
+
+  function renderAiResults(data) {
+    const labels = (data && data.labels) || [];
+    const suggestion = (data && data.suggestedDescription) || "";
+    if (labels.length === 0) {
+      aiMessage('<div class="ai-placeholder">No labels detected with enough confidence. Try another image.</div>');
+      return;
+    }
+    const chips = labels
+      .map(
+        (l, i) =>
+          '<span class="chip' + (i < 3 ? " top" : "") + '">' +
+          esc(l.name) +
+          ' <span class="pct">' + esc(String(l.confidence)) + "%</span></span>"
+      )
+      .join("");
+    aiMessage(
+      '<div class="chips">' + chips + "</div>" +
+      '<div class="suggestbox">' +
+      "<div>" +
+      '<div class="lab">Suggested description</div>' +
+      '<div class="txt">' + esc(suggestion) + "</div>" +
+      "</div>" +
+      '<div style="flex:1"></div>' +
+      '<button class="btn buy sm" id="useSuggestion">Use for new order</button>' +
+      "</div>"
+    );
+    $("useSuggestion").addEventListener("click", () => {
+      state.aiSuggestion = suggestion;
+      openOrderModal(null);
+    });
+  }
+
+  /* ---------------- boot ---------------- */
+  setConnected(null);
+  if (state.apiBase) {
+    loadOrders();
+  } else {
+    toggleSettings(true);
+    render();
+  }
+})();
+</script>
+</body>
+</html>
