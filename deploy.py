@@ -151,16 +151,20 @@ def ensure_sns_topic(sns):
     return topic_arn
 
 
-def ensure_s3_bucket(s3):
+def ensure_s3_bucket(s3, account_id):
+    # S3 bucket names are GLOBALLY unique, so suffix the account id to avoid
+    # collisions with buckets owned by other accounts (the bare name
+    # 'order-backups' is already taken globally).
+    bucket_name = f"{BACKUP_BUCKET_NAME}-{account_id}"
     try:
         # us-east-1 must NOT pass a LocationConstraint.
-        s3.create_bucket(Bucket=BACKUP_BUCKET_NAME)
-        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' created")
+        s3.create_bucket(Bucket=bucket_name)
+        print(f"{OK} S3 bucket '{bucket_name}' created")
     except s3.exceptions.BucketAlreadyOwnedByYou:
-        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' already exists (owned by you)")
+        print(f"{OK} S3 bucket '{bucket_name}' already exists (owned by you)")
     except s3.exceptions.BucketAlreadyExists:
-        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' already exists")
-    return BACKUP_BUCKET_NAME
+        print(f"{OK} S3 bucket '{bucket_name}' already exists")
+    return bucket_name
 
 
 def ensure_state_machine(sfn, role_arn, topic_arn, account_id):
@@ -535,7 +539,7 @@ def main():
     # references backupOrder's ARN as a string; backupOrder is deployed by
     # deploy_lambdas below, which is fine since no execution runs yet.
     topic_arn = ensure_sns_topic(sns)
-    backup_bucket = ensure_s3_bucket(s3)
+    backup_bucket = ensure_s3_bucket(s3, identity["Account"])
     fanout_arn = ensure_state_machine(sfn, role_arn, topic_arn, identity["Account"])
 
     deploy_lambdas(
