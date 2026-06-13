@@ -43,6 +43,7 @@ LAMBDAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lambdas"
 SNS_TOPIC_NAME = "order-deleted"
 BACKUP_BUCKET_NAME = "order-backups"
 STATE_MACHINE_NAME = "delete-order-fanout"
+AMPLIFY_APP_NAME = "order-management-client"
 
 API_NAME = "orders-api"
 API_STAGE = "prod"
@@ -230,6 +231,59 @@ def ensure_state_machine(sfn, role_arn, topic_arn, account_id):
         )
         print(f"{OK} State machine '{STATE_MACHINE_NAME}' updated ({sm_arn})")
     return sm_arn
+
+
+def ensure_amplify(amplify_client, invoke_url):
+    import urllib.request
+
+    branch_name = "main"
+
+    # Find an existing app by name, otherwise create one.
+    apps = amplify_client.list_apps().get("apps", [])
+    app = next((a for a in apps if a["name"] == AMPLIFY_APP_NAME), None)
+    if app:
+        app_id = app["appId"]
+        default_domain = app["defaultDomain"]
+        print(f"{OK} Amplify app '{AMPLIFY_APP_NAME}' already exists (appId={app_id})")
+    else:
+        resp = amplify_client.create_app(
+            name=AMPLIFY_APP_NAME,
+            platform="WEB",
+            environmentVariables={"API_URL": invoke_url},
+        )
+        app_id = resp["app"]["appId"]
+        default_domain = resp["app"]["defaultDomain"]
+        print(f"{OK} Amplify app '{AMPLIFY_APP_NAME}' created (appId={app_id})")
+
+    # Ensure the 'main' branch exists.
+    branches = amplify_client.list_branches(appId=app_id).get("branches", [])
+    if not any(b["branchName"] == branch_name for b in branches):
+        amplify_client.create_branch(appId=app_id, branchName=branch_name)
+        print(f"{OK} Amplify branch '{branch_name}' created")
+    else:
+        print(f"{OK} Amplify branch '{branch_name}' already exists")
+
+    # Zip client.html (as index.html) into an in-memory buffer.
+    client_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "client.html")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(client_path, arcname="index.html")
+    zip_bytes = buf.getvalue()
+
+    # Direct zip upload deployment: create -> PUT to presigned URL -> start.
+    dep = amplify_client.create_deployment(appId=app_id, branchName=branch_name)
+    zip_upload_url = dep["zipUploadUrl"]
+    job_id = dep["jobId"]
+    req = urllib.request.Request(zip_upload_url, data=zip_bytes, method="PUT")
+    urllib.request.urlopen(req)
+    amplify_client.start_deployment(appId=app_id, branchName=branch_name, jobId=job_id)
+    print(f"{OK} Amplify deployment started (jobId={job_id})")
+
+    live_url = f"https://{branch_name}.{default_domain}"
+    print("\n" + "=" * 62)
+    print(f" Amplify URL: {live_url}")
+    print("=" * 62 + "\n")
+    return live_url
 
 
 def get_lab_role_arn(iam):
@@ -492,6 +546,37 @@ def smoke_test(lambda_client, invoke_url):
         print(f"{FAIL} deleteOrder smoke test failed: {payload}")
         sys.exit(1)
 
+    # subscribeNotification: requests an email subscription (PendingConfirmation).
+    sub_event = {"body": json.dumps({"email": "smoketest@example.com"})}
+    resp = lambda_client.invoke(FunctionName="subscribeNotification", Payload=json.dumps(sub_event))
+    payload = json.loads(resp["Payload"].read())
+    if payload.get("statusCode") != 201:
+        print(f"{FAIL} subscribeNotification smoke test failed: {payload}")
+        sys.exit(1)
+    sub_arn = json.loads(payload["body"]).get("subscriptionArn")
+    print(f"{OK} subscribeNotification works (subscriptionArn={sub_arn})")
+
+    # unsubscribeNotification: tears down the subscription created above.
+    unsub_event = {"body": json.dumps({"subscriptionArn": sub_arn})}
+    resp = lambda_client.invoke(FunctionName="unsubscribeNotification", Payload=json.dumps(unsub_event))
+    payload = json.loads(resp["Payload"].read())
+    if payload.get("statusCode") != 200:
+        print(f"{FAIL} unsubscribeNotification smoke test failed: {payload}")
+        sys.exit(1)
+    print(f"{OK} unsubscribeNotification works (subscription removed)")
+
+    # generatePdfSummary: builds the deleted-orders PDF and returns a presigned URL.
+    resp = lambda_client.invoke(FunctionName="generatePdfSummary", Payload=json.dumps({}))
+    payload = json.loads(resp["Payload"].read())
+    if payload.get("statusCode") != 200:
+        print(f"{FAIL} generatePdfSummary smoke test failed: {payload}")
+        sys.exit(1)
+    pdf_url = json.loads(payload["body"]).get("url")
+    if not (isinstance(pdf_url, str) and pdf_url.startswith("https://")):
+        print(f"{FAIL} generatePdfSummary smoke test failed: bad url {payload}")
+        sys.exit(1)
+    print(f"{OK} generatePdfSummary works (url={pdf_url[:80]})")
+
 
 # ---------------------------------------------------------------- main
 def main():
@@ -531,6 +616,7 @@ def main():
     sns = session.client("sns")
     s3 = session.client("s3")
     sfn = session.client("stepfunctions")
+    amplify = session.client("amplify")
 
     ensure_table(dynamodb)
     role_arn = get_lab_role_arn(iam)
@@ -554,6 +640,13 @@ def main():
 
     print("\n" + "=" * 62)
     print(" Deployment complete — your Learner Lab is in sync.")
+    print("=" * 62)
+
+    # Deploy the web client to Amplify and print its live URL last so it is
+    # the most prominent, easy-to-copy line of the whole run.
+    amplify_url = ensure_amplify(amplify, invoke_url)
+    print("\n" + "=" * 62)
+    print(f" Live web client (Amplify): {amplify_url}")
     print("=" * 62)
 
 

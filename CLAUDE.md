@@ -42,8 +42,5 @@ in the `API_ROUTES` dict; other resource types need their own idempotent step.
 
 ## Status
 
-Done: CRUD Lambdas (create/getAll/get/update/delete), DynamoDB table, API Gateway
-(`orders-api`, stage `prod`), Rekognition `analyzeImage` (freestyle), deploy script.
-Remaining: SNS subscribe/unsubscribe · Step Functions delete fan-out + backupOrder ·
-S3 backups + PDF summary (`generatePdfSummary`) · Amplify web client.
-`deleteOrder` has a placeholder comment where `StartExecution` goes.
+Done: everything (all 11 Lambdas, SNS, S3, Step Functions, API Gateway, client.html, Amplify).
+Remaining: none — project complete.
