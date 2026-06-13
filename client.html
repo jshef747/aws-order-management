@@ -273,8 +273,6 @@
   .inline-result { font-size: 13px; margin-top: 8px; display: flex; align-items: flex-start; gap: 7px; }
   .inline-result.ok  { color: var(--success); }
   .inline-result.bad { color: var(--danger); }
-  .arn-box { margin-top: 10px; }
-  .arn-box label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 5px; color: var(--muted); }
 
   /* ================= SETTINGS ================= */
   .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
@@ -456,20 +454,15 @@
                    placeholder="you@example.com" autocomplete="off" spellcheck="false" />
             <button class="btn cart" id="subscribeBtn">Subscribe</button>
           </div>
-          <div class="arn-box" id="subArnBox" hidden>
-            <label for="subArnResult">Subscription ARN</label>
-            <input class="input mono" id="subArnResult" readonly />
-          </div>
           <div class="inline-result" id="subscribeResult" hidden></div>
         </div>
 
         <div class="sub-block">
           <h3>Unsubscribe</h3>
-          <div class="blurb">Paste a subscription ARN to remove it from notifications.</div>
+          <div class="blurb">Enter your email to stop receiving notifications.</div>
           <div class="stack-row">
-            <input class="input mono" id="unsubArnInput"
-                   placeholder="arn:aws:sns:us-east-1:…:orders-topic:…"
-                   autocomplete="off" spellcheck="false" />
+            <input class="input" id="unsubEmailInput" type="email"
+                   placeholder="you@example.com" autocomplete="off" spellcheck="false" />
             <button class="btn danger" id="unsubscribeBtn">Unsubscribe</button>
           </div>
           <div class="inline-result" id="unsubscribeResult" hidden></div>
@@ -1173,12 +1166,8 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Subscribing…';
     $("subscribeResult").hidden = true;
-    $("subArnBox").hidden = true;
     try {
-      const data = await api.post("/subscribe", { email: email });
-      const arn = (data && data.subscriptionArn) || "";
-      $("subArnResult").value = arn;
-      $("subArnBox").hidden = false;
+      await api.post("/subscribe", { email: email });
       showInlineResult("subscribeResult", true,
         "Subscribed — check " + email + " to confirm.");
       toast("Subscription request sent");
@@ -1190,9 +1179,9 @@
   });
 
   $("unsubscribeBtn").addEventListener("click", async () => {
-    const arn = $("unsubArnInput").value.trim();
-    if (!arn) {
-      showInlineResult("unsubscribeResult", false, "Enter a subscription ARN.");
+    const email = $("unsubEmailInput").value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      showInlineResult("unsubscribeResult", false, "Enter a valid email address.");
       return;
     }
     const btn = $("unsubscribeBtn");
@@ -1200,10 +1189,10 @@
     btn.innerHTML = '<span class="spinner"></span> Unsubscribing…';
     $("unsubscribeResult").hidden = true;
     try {
-      await call("DELETE", "/unsubscribe", { subscriptionArn: arn });
-      showInlineResult("unsubscribeResult", true, "Unsubscribed successfully.");
+      const data = await call("DELETE", "/unsubscribe", { email: email });
+      showInlineResult("unsubscribeResult", true, (data && data.message) || "Unsubscribed.");
       toast("Unsubscribed");
-      $("unsubArnInput").value = "";
+      $("unsubEmailInput").value = "";
     } catch (e) {
       showInlineResult("unsubscribeResult", false, e.message);
     }

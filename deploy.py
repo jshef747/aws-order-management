@@ -613,8 +613,9 @@ def smoke_test(lambda_client, invoke_url):
     sub_arn = json.loads(payload["body"]).get("subscriptionArn")
     print(f"{OK} subscribeNotification works (subscriptionArn={sub_arn})")
 
-    # unsubscribeNotification: tears down the subscription created above.
-    unsub_event = {"body": json.dumps({"subscriptionArn": sub_arn})}
+    # unsubscribeNotification: tears down the subscription created above by
+    # email (the pending subscription is a graceful no-op).
+    unsub_event = {"body": json.dumps({"email": "smoketest@example.com"})}
     resp = lambda_client.invoke(FunctionName="unsubscribeNotification", Payload=json.dumps(unsub_event))
     payload = json.loads(resp["Payload"].read())
     if payload.get("statusCode") != 200:
