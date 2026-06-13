@@ -1,6 +1,7 @@
 import json
 
 import boto3
+from botocore.exceptions import ClientError
 
 sns = boto3.client("sns")
 
@@ -26,7 +27,17 @@ def lambda_handler(event, context):
         if not subscription_arn:
             return respond(400, {"error": "'subscriptionArn' is required"})
 
-        sns.unsubscribe(SubscriptionArn=subscription_arn)
+        try:
+            sns.unsubscribe(SubscriptionArn=subscription_arn)
+        except ClientError as e:
+            # A pending (unconfirmed) subscription cannot be unsubscribed via the
+            # API — SNS rejects it, and it expires on its own. Unsubscribe is
+            # idempotent ("ensure this subscription is not active"), so treat the
+            # pending case as a successful no-op rather than a 500.
+            message = e.response.get("Error", {}).get("Message", "")
+            if "pending confirmation" in message.lower():
+                return respond(200, {"message": "Subscription pending confirmation; nothing to unsubscribe"})
+            raise
         return respond(200, {"message": "Unsubscribed"})
     except json.JSONDecodeError:
         return respond(400, {"error": "Request body must be valid JSON"})

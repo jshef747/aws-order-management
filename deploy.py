@@ -301,10 +301,22 @@ def zip_lambda(path, with_reportlab=False):
         return buf.getvalue()
 
     # generatePdfSummary needs reportlab bundled into the deployment package.
+    # reportlab pulls in Pillow, which ships a compiled C extension (_imaging).
+    # The deploy host may be Windows/macOS, but Lambda runs Linux x86_64 — so we
+    # must fetch the manylinux wheels for the Lambda runtime's Python version
+    # rather than the local platform's, or the bundled binaries fail to import.
     tmpdir = tempfile.mkdtemp(prefix="pdflambda_")
+    py_version = LAMBDA_RUNTIME.replace("python", "")  # "python3.12" -> "3.12"
     try:
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "reportlab", "-t", tmpdir]
+            [
+                sys.executable, "-m", "pip", "install", "reportlab",
+                "--target", tmpdir,
+                "--platform", "manylinux2014_x86_64",
+                "--implementation", "cp",
+                "--python-version", py_version,
+                "--only-binary=:all:",
+            ]
         )
         shutil.copyfile(path, os.path.join(tmpdir, "lambda_function.py"))
         buf = io.BytesIO()
