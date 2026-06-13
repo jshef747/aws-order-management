@@ -263,6 +263,19 @@
   .empty .big { color: #B5BDC4; display: flex; justify-content: center; margin-bottom: 10px; }
   .empty b { color: var(--ink); display: block; font-size: 16px; margin-bottom: 4px; }
 
+  /* ================= NOTIFICATIONS / REPORTS ================= */
+  .stack-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+  .stack-row .input { flex: 1; min-width: 240px; width: auto; }
+  .sub-block { margin-bottom: 18px; }
+  .sub-block:last-child { margin-bottom: 0; }
+  .sub-block h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+  .sub-block .blurb { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+  .inline-result { font-size: 13px; margin-top: 8px; display: flex; align-items: flex-start; gap: 7px; }
+  .inline-result.ok  { color: var(--success); }
+  .inline-result.bad { color: var(--danger); }
+  .arn-box { margin-top: 10px; }
+  .arn-box label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 5px; color: var(--muted); }
+
   /* ================= SETTINGS ================= */
   .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
   .settings-row .input { flex: 1; min-width: 240px; width: auto; }
@@ -425,6 +438,57 @@
             <div class="ai-placeholder">Upload an image and Rekognition's labels will appear here.</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ============ NOTIFICATIONS ============ -->
+    <section class="panel" id="notifyPanel">
+      <div class="panel-head">
+        <h2>Notifications</h2>
+        <div class="sub">Subscribe an email to order notifications via Amazon SNS</div>
+      </div>
+      <div class="panel-body">
+        <div class="sub-block">
+          <h3>Subscribe</h3>
+          <div class="blurb">Enter an email to receive order notifications. Confirm via the email AWS sends.</div>
+          <div class="stack-row">
+            <input class="input" id="subEmailInput" type="email"
+                   placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+            <button class="btn cart" id="subscribeBtn">Subscribe</button>
+          </div>
+          <div class="arn-box" id="subArnBox" hidden>
+            <label for="subArnResult">Subscription ARN</label>
+            <input class="input mono" id="subArnResult" readonly />
+          </div>
+          <div class="inline-result" id="subscribeResult" hidden></div>
+        </div>
+
+        <div class="sub-block">
+          <h3>Unsubscribe</h3>
+          <div class="blurb">Paste a subscription ARN to remove it from notifications.</div>
+          <div class="stack-row">
+            <input class="input mono" id="unsubArnInput"
+                   placeholder="arn:aws:sns:us-east-1:…:orders-topic:…"
+                   autocomplete="off" spellcheck="false" />
+            <button class="btn danger" id="unsubscribeBtn">Unsubscribe</button>
+          </div>
+          <div class="inline-result" id="unsubscribeResult" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DELETED ORDERS REPORT ============ -->
+    <section class="panel" id="reportPanel">
+      <div class="panel-head">
+        <h2>Deleted Orders Report</h2>
+        <div class="sub">Generate a PDF summary of deleted orders and open it in a new tab</div>
+      </div>
+      <div class="panel-body">
+        <button class="btn buy" id="downloadPdfBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Download Deleted Orders PDF
+        </button>
+        <div class="inline-result" id="reportResult" hidden></div>
       </div>
     </section>
 
@@ -1086,6 +1150,86 @@
       openOrderModal(null);
     });
   }
+
+  /* ---------------- notifications ---------------- */
+  function showInlineResult(id, ok, msg) {
+    const el = $(id);
+    el.hidden = false;
+    el.className = "inline-result " + (ok ? "ok" : "bad");
+    el.innerHTML =
+      (ok
+        ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>'
+        : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6L6 18M6 6l12 12"/></svg>') +
+      "<span>" + esc(msg) + "</span>";
+  }
+
+  $("subscribeBtn").addEventListener("click", async () => {
+    const email = $("subEmailInput").value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      showInlineResult("subscribeResult", false, "Enter a valid email address.");
+      return;
+    }
+    const btn = $("subscribeBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Subscribing…';
+    $("subscribeResult").hidden = true;
+    $("subArnBox").hidden = true;
+    try {
+      const data = await api.post("/subscribe", { email: email });
+      const arn = (data && data.subscriptionArn) || "";
+      $("subArnResult").value = arn;
+      $("subArnBox").hidden = false;
+      showInlineResult("subscribeResult", true,
+        "Subscribed — check " + email + " to confirm.");
+      toast("Subscription request sent");
+    } catch (e) {
+      showInlineResult("subscribeResult", false, e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = "Subscribe";
+  });
+
+  $("unsubscribeBtn").addEventListener("click", async () => {
+    const arn = $("unsubArnInput").value.trim();
+    if (!arn) {
+      showInlineResult("unsubscribeResult", false, "Enter a subscription ARN.");
+      return;
+    }
+    const btn = $("unsubscribeBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Unsubscribing…';
+    $("unsubscribeResult").hidden = true;
+    try {
+      await call("DELETE", "/unsubscribe", { subscriptionArn: arn });
+      showInlineResult("unsubscribeResult", true, "Unsubscribed successfully.");
+      toast("Unsubscribed");
+      $("unsubArnInput").value = "";
+    } catch (e) {
+      showInlineResult("unsubscribeResult", false, e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = "Unsubscribe";
+  });
+
+  /* ---------------- deleted orders report ---------------- */
+  $("downloadPdfBtn").addEventListener("click", async () => {
+    const btn = $("downloadPdfBtn");
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating…';
+    $("reportResult").hidden = true;
+    try {
+      const data = await api.get("/generate-pdf");
+      const url = data && data.url;
+      if (!url) throw new Error("No URL returned by the server.");
+      window.open(url, "_blank");
+      showInlineResult("reportResult", true, "PDF ready — opened in a new tab.");
+    } catch (e) {
+      showInlineResult("reportResult", false, e.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = label;
+  });
 
   /* ---------------- boot ---------------- */
   setConnected(null);

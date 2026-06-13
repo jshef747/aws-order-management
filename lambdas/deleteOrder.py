@@ -6,6 +6,7 @@ import boto3
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ.get("ORDERS_TABLE", "orders"))
+sfn_client = boto3.client("stepfunctions")
 
 HEADERS = {
     "Content-Type": "application/json",
@@ -43,9 +44,18 @@ def lambda_handler(event, context):
 
         table.delete_item(Key={"orderId": order_id})
 
-        # NOTE (later phase): hand the deleted item off to the Step Functions
-        # state machine here via states.start_execution (non-blocking), which
-        # fans out in parallel to SNS notification + S3 TXT backup.
+        # Fire-and-forget: hand the deleted item off to the Step Functions
+        # state machine (non-blocking) which fans out to SNS + S3 TXT backup.
+        # A Step Functions failure must never break the delete response.
+        state_machine_arn = os.environ.get("FANOUT_STATE_MACHINE_ARN")
+        if state_machine_arn:
+            try:
+                sfn_client.start_execution(
+                    stateMachineArn=state_machine_arn,
+                    input=json.dumps(to_plain(item)),
+                )
+            except Exception as sfn_err:
+                print(f"Step Functions start_execution failed: {sfn_err}")
 
         return respond(200, {"message": "Order deleted", "order": to_plain(item)})
     except Exception as e:

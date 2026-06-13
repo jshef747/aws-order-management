@@ -22,10 +22,13 @@ Usage:  python deploy.py    (Windows)
 """
 
 import io
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 
@@ -36,6 +39,11 @@ LAMBDA_RUNTIME = "python3.12"
 LAMBDA_TIMEOUT = 30
 LAMBDAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lambdas")
 
+# New resource names (single source of truth for provisioning).
+SNS_TOPIC_NAME = "order-deleted"
+BACKUP_BUCKET_NAME = "order-backups"
+STATE_MACHINE_NAME = "delete-order-fanout"
+
 API_NAME = "orders-api"
 API_STAGE = "prod"
 
@@ -45,6 +53,9 @@ API_ROUTES = {
     "/orders": {"POST": "createOrder", "GET": "getAllOrders"},
     "/orders/{id}": {"GET": "getOrder", "PUT": "updateOrder", "DELETE": "deleteOrder"},
     "/analyze-image": {"POST": "analyzeImage"},
+    "/subscribe": {"POST": "subscribeNotification"},
+    "/unsubscribe": {"DELETE": "unsubscribeNotification"},
+    "/generate-pdf": {"GET": "generatePdfSummary"},
 }
 
 OK = "[OK]"
@@ -132,6 +143,91 @@ def ensure_table(dynamodb):
         print(f"{OK} DynamoDB table '{TABLE_NAME}' already exists")
 
 
+def ensure_sns_topic(sns):
+    # create_topic is idempotent: returns the existing ARN if the topic exists.
+    resp = sns.create_topic(Name=SNS_TOPIC_NAME)
+    topic_arn = resp["TopicArn"]
+    print(f"{OK} SNS topic '{SNS_TOPIC_NAME}' ready ({topic_arn})")
+    return topic_arn
+
+
+def ensure_s3_bucket(s3):
+    try:
+        # us-east-1 must NOT pass a LocationConstraint.
+        s3.create_bucket(Bucket=BACKUP_BUCKET_NAME)
+        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' created")
+    except s3.exceptions.BucketAlreadyOwnedByYou:
+        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' already exists (owned by you)")
+    except s3.exceptions.BucketAlreadyExists:
+        print(f"{OK} S3 bucket '{BACKUP_BUCKET_NAME}' already exists")
+    return BACKUP_BUCKET_NAME
+
+
+def ensure_state_machine(sfn, role_arn, topic_arn, account_id):
+    backup_fn_arn = f"arn:aws:lambda:{REGION}:{account_id}:function:backupOrder"
+    asl = {
+        "Comment": "Fan out a deleted order to SNS notification and S3 backup in parallel.",
+        "StartAt": "FanOut",
+        "States": {
+            "FanOut": {
+                "Type": "Parallel",
+                "End": True,
+                "Branches": [
+                    {
+                        "StartAt": "NotifyDeleted",
+                        "States": {
+                            "NotifyDeleted": {
+                                "Type": "Task",
+                                "Resource": "arn:aws:states:::sns:publish",
+                                "Parameters": {
+                                    "TopicArn": topic_arn,
+                                    "Message.$": "States.JsonToString($)",
+                                },
+                                "End": True,
+                            }
+                        },
+                    },
+                    {
+                        "StartAt": "BackupOrder",
+                        "States": {
+                            "BackupOrder": {
+                                "Type": "Task",
+                                "Resource": "arn:aws:states:::lambda:invoke",
+                                "Parameters": {
+                                    "FunctionName": backup_fn_arn,
+                                    "Payload.$": "$",
+                                },
+                                "End": True,
+                            }
+                        },
+                    },
+                ],
+            }
+        },
+    }
+    definition = json.dumps(asl)
+    try:
+        resp = sfn.create_state_machine(
+            name=STATE_MACHINE_NAME,
+            definition=definition,
+            roleArn=role_arn,
+            type="STANDARD",
+        )
+        sm_arn = resp["stateMachineArn"]
+        print(f"{OK} State machine '{STATE_MACHINE_NAME}' created ({sm_arn})")
+    except sfn.exceptions.StateMachineAlreadyExists:
+        machines = sfn.list_state_machines(maxResults=1000)["stateMachines"]
+        sm = next((m for m in machines if m["name"] == STATE_MACHINE_NAME), None)
+        sm_arn = sm["stateMachineArn"]
+        sfn.update_state_machine(
+            stateMachineArn=sm_arn,
+            definition=definition,
+            roleArn=role_arn,
+        )
+        print(f"{OK} State machine '{STATE_MACHINE_NAME}' updated ({sm_arn})")
+    return sm_arn
+
+
 def get_lab_role_arn(iam):
     role = iam.get_role(RoleName="LabRole")
     arn = role["Role"]["Arn"]
@@ -139,15 +235,41 @@ def get_lab_role_arn(iam):
     return arn
 
 
-def zip_lambda(path):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(path, arcname="lambda_function.py")
-    return buf.getvalue()
+def zip_lambda(path, with_reportlab=False):
+    if not with_reportlab:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(path, arcname="lambda_function.py")
+        return buf.getvalue()
+
+    # generatePdfSummary needs reportlab bundled into the deployment package.
+    tmpdir = tempfile.mkdtemp(prefix="pdflambda_")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "reportlab", "-t", tmpdir]
+        )
+        shutil.copyfile(path, os.path.join(tmpdir, "lambda_function.py"))
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, _dirs, files in os.walk(tmpdir):
+                for fn in files:
+                    full = os.path.join(root, fn)
+                    arc = os.path.relpath(full, tmpdir)
+                    zf.write(full, arcname=arc)
+        return buf.getvalue()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def deploy_lambdas(lambda_client, role_arn):
-    env = {"Variables": {"ORDERS_TABLE": TABLE_NAME}}
+def deploy_lambdas(lambda_client, role_arn, fanout_arn=None, topic_arn=None, backup_bucket=None):
+    variables = {"ORDERS_TABLE": TABLE_NAME}
+    if fanout_arn:
+        variables["FANOUT_STATE_MACHINE_ARN"] = fanout_arn
+    if topic_arn:
+        variables["ORDER_DELETED_TOPIC_ARN"] = topic_arn
+    if backup_bucket:
+        variables["BACKUP_BUCKET"] = backup_bucket
+    env = {"Variables": variables}
     files = sorted(f for f in os.listdir(LAMBDAS_DIR) if f.endswith(".py"))
     if not files:
         print(f"{FAIL} No .py files found in {LAMBDAS_DIR}")
@@ -155,7 +277,10 @@ def deploy_lambdas(lambda_client, role_arn):
 
     for fname in files:
         name = fname[:-3]  # createOrder.py -> createOrder
-        code = zip_lambda(os.path.join(LAMBDAS_DIR, fname))
+        code = zip_lambda(
+            os.path.join(LAMBDAS_DIR, fname),
+            with_reportlab=(name == "generatePdfSummary"),
+        )
         try:
             lambda_client.get_function(FunctionName=name)
             lambda_client.update_function_code(FunctionName=name, ZipFile=code)
@@ -309,7 +434,6 @@ def add_cors_options(apigw, api_id, resource_id, methods):
 
 # ---------------------------------------------------------------- smoke test
 def smoke_test(lambda_client, invoke_url):
-    import json
     import urllib.request
 
     print("\nRunning smoke test...")
@@ -370,7 +494,16 @@ def main():
     ensure_boto3()
     import boto3
 
-    access_key, secret_key, session_token = read_credentials()
+    if "--auto" in sys.argv:
+        access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        session_token = os.environ.get("AWS_SESSION_TOKEN")
+        if not (access_key and secret_key and session_token):
+            print(f"{FAIL} --auto requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN env vars.")
+            sys.exit(1)
+        print(f"{OK} Using credentials from environment (--auto mode)\n")
+    else:
+        access_key, secret_key, session_token = read_credentials()
 
     session = boto3.Session(
         aws_access_key_id=access_key,
@@ -391,10 +524,27 @@ def main():
     iam = session.client("iam")
     lambda_client = session.client("lambda")
     apigw = session.client("apigateway")
+    sns = session.client("sns")
+    s3 = session.client("s3")
+    sfn = session.client("stepfunctions")
 
     ensure_table(dynamodb)
     role_arn = get_lab_role_arn(iam)
-    deploy_lambdas(lambda_client, role_arn)
+
+    # New resources first: SNS -> S3 -> Step Functions. The state machine
+    # references backupOrder's ARN as a string; backupOrder is deployed by
+    # deploy_lambdas below, which is fine since no execution runs yet.
+    topic_arn = ensure_sns_topic(sns)
+    backup_bucket = ensure_s3_bucket(s3)
+    fanout_arn = ensure_state_machine(sfn, role_arn, topic_arn, identity["Account"])
+
+    deploy_lambdas(
+        lambda_client,
+        role_arn,
+        fanout_arn=fanout_arn,
+        topic_arn=topic_arn,
+        backup_bucket=backup_bucket,
+    )
     invoke_url = ensure_rest_api(apigw, lambda_client, identity["Account"])
     smoke_test(lambda_client, invoke_url)
 
