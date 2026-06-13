@@ -186,7 +186,22 @@ def ensure_state_machine(sfn, role_arn, topic_arn, account_id):
                                 "Resource": "arn:aws:states:::sns:publish",
                                 "Parameters": {
                                     "TopicArn": topic_arn,
-                                    "Message.$": "States.JsonToString($)",
+                                    # Human-readable plain-text email (SNS email
+                                    # subscriptions don't support HTML). Built
+                                    # from the deleted order with States.Format.
+                                    "Subject": "Order Management — an order was deleted",
+                                    "Message.$": (
+                                        "States.Format("
+                                        "'Hello,\n\n"
+                                        "An order has just been deleted from the Order Management System.\n\n"
+                                        "  Order ID     : {}\n"
+                                        "  Description  : {}\n"
+                                        "  Price        : ${}\n"
+                                        "  Created      : {}\n\n"
+                                        "A backup copy of this order has been archived to S3.\n\n"
+                                        "— Order Management System (automated message)', "
+                                        "$.orderId, $.description, $.price, $.creationDate)"
+                                    ),
                                 },
                                 "End": True,
                             }
