@@ -271,6 +271,32 @@ def ensure_amplify(amplify_client, invoke_url):
         zf.write(client_path, arcname="index.html")
     zip_bytes = buf.getvalue()
 
+    # A prior deployment job may still be running (Amplify rejects a new
+    # deployment until the last one finishes). Wait for any active job to
+    # reach a terminal state; cancel it if it stays stuck past the timeout.
+    _ACTIVE = {"PENDING", "PROVISIONING", "RUNNING", "CANCELLING"}
+    deadline = time.time() + 180
+    while True:
+        jobs = amplify_client.list_jobs(
+            appId=app_id, branchName=branch_name, maxResults=10
+        ).get("jobSummaries", [])
+        active = [j for j in jobs if j["status"] in _ACTIVE]
+        if not active:
+            break
+        stuck = active[0]
+        if time.time() > deadline:
+            print(f"{OK} Cancelling stuck Amplify job {stuck['jobId']} ({stuck['status']})")
+            try:
+                amplify_client.stop_job(
+                    appId=app_id, branchName=branch_name, jobId=stuck["jobId"]
+                )
+            except Exception:
+                pass
+            deadline = time.time() + 180  # give the cancellation time to settle
+        else:
+            print(f"   waiting for in-progress Amplify job {stuck['jobId']} ({stuck['status']})…")
+            time.sleep(5)
+
     # Direct zip upload deployment: create -> PUT to presigned URL -> start.
     dep = amplify_client.create_deployment(appId=app_id, branchName=branch_name)
     zip_upload_url = dep["zipUploadUrl"]
