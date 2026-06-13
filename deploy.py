@@ -234,6 +234,7 @@ def ensure_state_machine(sfn, role_arn, topic_arn, account_id):
 
 
 def ensure_amplify(amplify_client, invoke_url):
+    import ssl
     import urllib.request
 
     branch_name = "main"
@@ -275,7 +276,10 @@ def ensure_amplify(amplify_client, invoke_url):
     zip_upload_url = dep["zipUploadUrl"]
     job_id = dep["jobId"]
     req = urllib.request.Request(zip_upload_url, data=zip_bytes, method="PUT")
-    urllib.request.urlopen(req)
+    _ssl_ctx = ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    urllib.request.urlopen(req, context=_ssl_ctx)
     amplify_client.start_deployment(appId=app_id, branchName=branch_name, jobId=job_id)
     print(f"{OK} Amplify deployment started (jobId={job_id})")
 
