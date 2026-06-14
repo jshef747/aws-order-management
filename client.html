@@ -3,8 +3,11 @@
   Order Management System - web client.
   Single self-contained file: HTML + CSS + vanilla JS, no build step.
   Talks to the orders-api API Gateway deployed by deploy.py.
-  Set the API base URL via the Settings panel (saved in localStorage),
+  Set the API base URL via the Settings tab (saved in localStorage),
   using the invoke URL printed by deploy.py each Learner Lab session.
+
+  Layout: left-sidebar dashboard with six tabbed views
+  (Overview, Orders, Analyze, Notifications, Reports, Settings).
 -->
 <html lang="en">
 <head>
@@ -16,13 +19,13 @@
 
   :root {
     /* Amazon-inspired palette */
-    --navy:       #131921;   /* header */
-    --navy-2:     #232F3E;   /* sub-header */
+    --navy:       #131921;
+    --navy-2:     #232F3E;
     --orange:     #FF9900;
     --orange-d:   #E47911;
-    --yellow:     #FFD814;   /* buy button */
+    --yellow:     #FFD814;
     --yellow-d:   #F7CA00;
-    --page:       #EAEDED;   /* page bg */
+    --page:       #EAEDED;
     --white:      #FFFFFF;
     --ink:        #0F1111;
     --muted:      #565959;
@@ -55,84 +58,99 @@
   }
   [hidden] { display: none !important; }
 
-  /* ================= HEADER ================= */
-  .header {
-    background: var(--navy);
-    color: #fff;
-    padding: 10px 18px;
-    display: flex; align-items: center; gap: 16px;
+  /* ================= APP SHELL ================= */
+  .app { display: flex; min-height: 100dvh; }
+
+  /* ---- sidebar ---- */
+  .sidebar {
+    width: 248px; flex: none; background: var(--navy); color: #fff;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100dvh;
   }
-  .logo { display: flex; align-items: baseline; gap: 2px; cursor: pointer; padding: 6px 8px; border: 1px solid transparent; border-radius: 4px; }
-  .logo:hover { border-color: #fff; }
-  .logo .name { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
-  .logo .smile { color: var(--orange); font-weight: 800; }
-  .searchbar {
-    flex: 1; display: flex; height: 40px; border-radius: 6px; overflow: hidden;
-    background: #fff;
+  .brand {
+    padding: 18px 20px; display: flex; align-items: baseline; gap: 2px; cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,.08);
   }
-  .searchbar input {
-    flex: 1; border: none; outline: none; font: inherit; font-size: 14.5px; padding: 0 12px; color: var(--ink);
+  .brand .name { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+  .brand .smile { color: var(--orange); font-weight: 800; }
+  .nav { display: flex; flex-direction: column; gap: 2px; padding: 12px 10px; flex: 1; overflow: auto; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 7px;
+    background: none; border: none; color: #D5DBE2; font: inherit; font-size: 14px; cursor: pointer;
+    text-align: left; width: 100%; border-left: 3px solid transparent;
+    transition: background .12s, color .12s;
   }
-  .searchbar .go {
-    width: 48px; border: none; cursor: pointer; display: grid; place-items: center;
-    background: var(--orange); color: var(--navy);
+  .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .nav-item.active { background: rgba(255,153,0,.14); color: #fff; border-left-color: var(--orange); font-weight: 600; }
+  .nav-item svg { flex: none; }
+  .nav-item .badge {
+    margin-left: auto; font-size: 11px; font-weight: 700; color: var(--navy);
+    background: var(--orange); border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center;
   }
-  .searchbar .go:hover { background: var(--orange-d); }
-  .header .navlink {
-    padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; cursor: pointer; line-height: 1.25;
-    background: none; color: #fff; font: inherit; text-align: left;
+  .sidebar-foot {
+    padding: 14px 16px; border-top: 1px solid rgba(255,255,255,.08);
+    font-size: 12.5px; color: #B9C4CE; display: flex; flex-direction: column; gap: 8px;
   }
-  .header .navlink:hover { border-color: #fff; }
-  .header .navlink .top { font-size: 11px; color: #CCC; }
-  .header .navlink .bottom { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .sidebar-foot .row { display: flex; align-items: center; gap: 8px; }
   .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #8B9298; flex: none; }
   .conn-dot.ok  { background: #3FC380; }
   .conn-dot.bad { background: #FF6161; }
 
-  /* sub-nav */
-  .subnav {
-    background: var(--navy-2); color: #E6E6E6; font-size: 13px;
-    display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap;
-  }
-  .subnav .item {
-    padding: 5px 9px; border: 1px solid transparent; border-radius: 4px; cursor: pointer;
-    display: flex; align-items: center; gap: 6px; background: none; color: inherit; font: inherit;
-  }
-  .subnav .item:hover { border-color: #fff; color: #fff; }
-  .subnav .item.active { color: #fff; font-weight: 600; border-color: #fff; }
-  .subnav .spacer { flex: 1; }
-  .subnav .deal { color: var(--orange); font-weight: 700; }
+  /* ---- content ---- */
+  .content { flex: 1; min-width: 0; padding: 26px 30px 70px; }
+  .view { max-width: 1280px; margin: 0 auto; }
+  .view:focus { outline: none; }
+  .view-header { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+  .view-header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.4px; }
+  .view-header .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .view-header .spacer { flex: 1; }
+  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--muted); margin: 24px 2px 12px; }
 
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px 16px 70px; }
+  /* ---- KPI cards (Overview) ---- */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .kpi-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .kpi-card .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .kpi-card .k { font-size: 12.5px; color: var(--muted); }
+  .kpi-card .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    background: #FFF4E0; color: var(--orange-d); }
+  .kpi-card .v { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+  .kpi-card .v.money { color: var(--orange-d); }
 
-  /* ================= HERO STRIP ================= */
-  .hero {
-    border-radius: var(--radius);
-    background: linear-gradient(100deg, #232F3E 0%, #37475A 70%, #485769 100%);
-    color: #fff; padding: 22px 26px; margin-bottom: 16px;
-    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  /* ---- quick actions (Overview) ---- */
+  .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .qa {
+    display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
+    background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; cursor: pointer; font: inherit; text-align: left;
+    transition: box-shadow .15s, border-color .15s;
   }
-  .hero h1 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
-  .hero p { margin: 0; color: #C8D1DA; font-size: 13.5px; }
-  .hero .spacer { flex: 1; }
-  .hero-stats { display: flex; gap: 12px; flex-wrap: wrap; }
-  .hstat {
-    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
-    border-radius: 8px; padding: 10px 16px; min-width: 110px;
-  }
-  .hstat .v { font-size: 19px; font-weight: 800; }
-  .hstat .v.money { color: var(--orange); }
-  .hstat .k { font-size: 11.5px; color: #B9C4CE; }
+  .qa:hover { box-shadow: 0 4px 14px rgba(15,17,17,.12); border-color: #C8CDD1; }
+  .qa-ic { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: #FFF4E0; color: var(--orange-d); }
+  .qa-t { font-weight: 700; font-size: 14px; }
+  .qa-d { font-size: 12px; color: var(--muted); }
+
+  /* ---- recent orders (Overview) ---- */
+  .recent { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .recent-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid #EEE; }
+  .recent-row:first-child { border-top: none; }
+  .recent-row .r-desc { flex: 1; font-size: 13.5px; overflow-wrap: anywhere; }
+  .recent-row .r-when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .recent-row .r-price { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recent-empty { padding: 22px 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
   /* ================= CARDS / PANELS ================= */
-  .panel {
-    background: var(--white); border-radius: var(--radius); border: 1px solid var(--border);
-    margin-bottom: 16px;
-  }
-  .panel-head { padding: 14px 18px 0; }
-  .panel-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  .panel { background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); }
+  .panel + .panel { margin-top: 16px; }
+  .panel-head { padding: 16px 18px 0; }
+  .panel-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
   .panel-head .sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-  .panel-body { padding: 14px 18px 18px; }
+  .panel-body { padding: 16px 18px 18px; }
+  .banner {
+    background: #FFF4E0; border: 1px solid #F5C588; color: #7A4B00; border-radius: var(--radius);
+    padding: 12px 16px; margin-bottom: 16px; font-size: 13px; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner svg { flex: none; color: var(--orange-d); margin-top: 1px; }
 
   /* ================= AI / image analysis ================= */
   .ai-grid { display: grid; grid-template-columns: 230px 1fr; gap: 18px; align-items: start; }
@@ -190,22 +208,24 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ================= TOOLBAR ================= */
-  .toolbar {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 2px 12px;
+  /* ================= ORDERS TOOLBAR ================= */
+  .orders-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 0 12px; height: 40px; flex: 1; min-width: 220px;
   }
-  .toolbar .results { font-size: 13.5px; color: var(--muted); }
-  .toolbar .results b { color: var(--ink); }
-  .toolbar .spacer { flex: 1; }
+  .search-box input { border: none; outline: none; font: inherit; font-size: 14px; flex: 1; background: none; color: var(--ink); }
+  .search-box .go { background: none; border: none; padding: 0; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
+  .search-box .go:hover { color: var(--orange-d); }
   select.sort {
-    font: inherit; font-size: 13px; padding: 7px 11px; cursor: pointer;
-    border: 1px solid var(--border); border-radius: 8px; background: #F0F2F2;
+    font: inherit; font-size: 13px; padding: 9px 11px; cursor: pointer; height: 40px;
+    border: 1px solid var(--border); border-radius: 8px; background: #fff;
   }
+  .results { font-size: 13px; color: var(--muted); margin: 0 2px 12px; }
+  .results b { color: var(--ink); }
 
   /* ================= PRODUCT GRID ================= */
-  .grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
-  }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .product {
     background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
     display: flex; flex-direction: column; overflow: hidden;
@@ -325,227 +345,342 @@
   .toast.error .ic { color: var(--danger); }
 
   /* ================= RESPONSIVE ================= */
-  @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 760px)  {
+  @media (max-width: 1100px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .quick-actions { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 860px) {
+    .app { flex-direction: column; }
+    .sidebar {
+      width: 100%; height: auto; position: sticky; top: 0; z-index: 50;
+      flex-direction: row; align-items: center; overflow-x: auto;
+    }
+    .brand { border-bottom: none; border-right: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+    .nav { flex-direction: row; padding: 8px; gap: 4px; flex: 1; }
+    .nav-item { border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; padding: 9px 12px; }
+    .nav-item.active { border-left: none; border-bottom-color: var(--orange); }
+    .nav-item .badge { display: none; }
+    .sidebar-foot { display: none; }
+    .content { padding: 18px 16px 60px; }
+  }
+  @media (max-width: 760px) {
     .grid { grid-template-columns: repeat(2, 1fr); }
     .ai-grid { grid-template-columns: 1fr; }
-    .header { flex-wrap: wrap; }
-    .searchbar { order: 3; flex-basis: 100%; }
   }
-  @media (max-width: 460px)  { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 460px) {
+    .grid { grid-template-columns: 1fr; }
+    .kpi-row, .quick-actions { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
-  <!-- ============ HEADER ============ -->
-  <header class="header">
-    <div class="logo" id="logo" title="Reload orders">
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand" id="logo" title="Reload orders">
       <span class="name">orders</span><span class="smile">.aws</span>
     </div>
 
-    <div class="searchbar">
-      <input id="search" placeholder="Search your orders…" aria-label="Search orders" />
-      <button class="go" id="searchBtn" aria-label="Search">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <nav class="nav" aria-label="Sections">
+      <button class="nav-item" data-tab="overview">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Overview
       </button>
-    </div>
+      <button class="nav-item" data-tab="orders">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg>
+        Orders
+        <span class="badge" id="navOrderCount" hidden>0</span>
+      </button>
+      <button class="nav-item" data-tab="analyze">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+        Image Analysis
+      </button>
+      <button class="nav-item" data-tab="notify">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        Notifications
+      </button>
+      <button class="nav-item" data-tab="reports">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+        Reports
+      </button>
+      <button class="nav-item" data-tab="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </nav>
 
-    <button class="navlink" id="statusLink" title="API connection status">
-      <div class="top">API status</div>
-      <div class="bottom"><span class="conn-dot" id="connDot"></span> <span id="connText">Not configured</span></div>
-    </button>
-    <button class="navlink" id="settingsLink" aria-expanded="false">
-      <div class="top">Settings</div>
-      <div class="bottom">API URL ▾</div>
-    </button>
-    <button class="navlink" id="cartLink" title="Total orders">
-      <div class="top">Total</div>
-      <div class="bottom" style="color:var(--orange)">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 3h2l2.5 12.5a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 7H6"/></svg>
+    <div class="sidebar-foot">
+      <div class="row"><span class="conn-dot" id="connDot"></span> <span id="connText">Not configured</span></div>
+      <div class="row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 3h2l2.5 12.5a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 7H6"/></svg>
         <span id="cartCount">— orders</span>
       </div>
-    </button>
-  </header>
+    </div>
+  </aside>
 
-  <!-- sub-nav: sort shortcuts -->
-  <nav class="subnav" aria-label="Sort orders">
-    <button class="item" data-sort="newest">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      All orders
-    </button>
-    <button class="item" data-sort="oldest">Oldest</button>
-    <button class="item" data-sort="price-desc">Price: high to low</button>
-    <button class="item" data-sort="price-asc">Price: low to high</button>
-    <div class="spacer"></div>
-    <button class="item deal" id="aiLink">✦ Analyze image with Rekognition</button>
-  </nav>
+  <!-- ============ CONTENT ============ -->
+  <main class="content">
 
-  <div class="wrap">
-
-    <!-- ============ SETTINGS PANEL ============ -->
-    <section class="panel" id="settingsPanel" hidden>
-      <div class="panel-head"><h2 style="font-size:16px">API endpoint</h2>
-        <div class="sub">Paste the invoke URL printed by deploy.py — saved in this browser</div></div>
-      <div class="panel-body">
-        <div class="settings-row">
-          <input class="input mono" id="apiUrlInput"
-                 placeholder="https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod"
-                 autocomplete="off" spellcheck="false" />
-          <button class="btn" id="testBtn">Test</button>
-          <button class="btn cart" id="saveBtn">Save</button>
+    <!-- ---- Overview ---- -->
+    <section class="view" id="view-overview" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Overview</h1>
+          <div class="sub">Event-driven serverless Order Management · us-east-1</div>
         </div>
-        <div class="test-result" id="testResult" hidden></div>
-      </div>
-    </section>
-
-    <!-- ============ HERO ============ -->
-    <section class="hero">
-      <div>
-        <h1>Your Orders</h1>
-        <p>Event-driven serverless Order Management · us-east-1</p>
-      </div>
-      <div class="spacer"></div>
-      <div class="hero-stats">
-        <div class="hstat"><div class="v" id="statCount">—</div><div class="k">total orders</div></div>
-        <div class="hstat"><div class="v money" id="statTotal">—</div><div class="k">total value</div></div>
-        <div class="hstat"><div class="v money" id="statAvg">—</div><div class="k">avg order</div></div>
-        <div class="hstat"><div class="v" id="statNewest">—</div><div class="k">newest order</div></div>
-      </div>
-    </section>
-
-    <!-- ============ IMAGE ANALYSIS ============ -->
-    <section class="panel" id="aiPanel">
-      <div class="panel-head">
-        <h2>Analyze a product image</h2>
-        <div class="sub">Amazon Rekognition detects labels and suggests an order description</div>
-      </div>
-      <div class="panel-body">
-        <div class="ai-grid">
-          <div>
-            <button class="dropzone" id="dropzone" aria-label="Upload an image to analyze">
-              <span class="dz-icon" id="dzIcon">
-                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
-              </span>
-              <b id="dzTitle">Drop image here or browse</b>
-              <span style="font-size:12px" id="dzSub">JPEG / PNG · up to 5 MB</span>
-              <img class="dz-preview" id="dzPreview" alt="Selected image preview" hidden />
-            </button>
-            <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden />
-          </div>
-          <div id="aiResults">
-            <div class="ai-placeholder">Upload an image and Rekognition's labels will appear here.</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ NOTIFICATIONS ============ -->
-    <section class="panel" id="notifyPanel">
-      <div class="panel-head">
-        <h2>Notifications</h2>
-        <div class="sub">Subscribe an email to order notifications via Amazon SNS</div>
-      </div>
-      <div class="panel-body">
-        <div class="sub-block">
-          <h3>Subscribe</h3>
-          <div class="blurb">Enter an email to receive order notifications. Confirm via the email AWS sends.</div>
-          <div class="stack-row">
-            <input class="input" id="subEmailInput" type="email"
-                   placeholder="you@example.com" autocomplete="off" spellcheck="false" />
-            <button class="btn cart" id="subscribeBtn">Subscribe</button>
-          </div>
-          <div class="inline-result" id="subscribeResult" hidden></div>
-        </div>
-
-        <div class="sub-block">
-          <h3>Unsubscribe</h3>
-          <div class="blurb">Enter your email to stop receiving notifications.</div>
-          <div class="stack-row">
-            <input class="input" id="unsubEmailInput" type="email"
-                   placeholder="you@example.com" autocomplete="off" spellcheck="false" />
-            <button class="btn danger" id="unsubscribeBtn">Unsubscribe</button>
-          </div>
-          <div class="inline-result" id="unsubscribeResult" hidden></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ DELETED ORDERS REPORT ============ -->
-    <section class="panel" id="reportPanel">
-      <div class="panel-head">
-        <h2>Deleted Orders Report</h2>
-        <div class="sub">Generate a PDF summary of deleted orders and open it in a new tab</div>
-      </div>
-      <div class="panel-body">
-        <button class="btn buy" id="downloadPdfBtn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          Download Deleted Orders PDF
+        <div class="spacer"></div>
+        <button class="btn cart" id="ovNewOrder">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          New order
         </button>
-        <div class="inline-result" id="reportResult" hidden></div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="top"><span class="k">Total orders</span>
+            <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/></svg></span></div>
+          <div class="v" id="statCount">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="top"><span class="k">Total value</span>
+            <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div>
+          <div class="v money" id="statTotal">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="top"><span class="k">Average order</span>
+            <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span></div>
+          <div class="v money" id="statAvg">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="top"><span class="k">Newest order</span>
+            <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span></div>
+          <div class="v" id="statNewest">—</div>
+        </div>
+      </div>
+
+      <div class="section-title">Quick actions</div>
+      <div class="quick-actions">
+        <button class="qa" id="qaNew">
+          <span class="qa-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          <span class="qa-t">Create order</span>
+          <span class="qa-d">Add a new order</span>
+        </button>
+        <button class="qa" id="qaAnalyze">
+          <span class="qa-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></span>
+          <span class="qa-t">Analyze image</span>
+          <span class="qa-d">Rekognition labels</span>
+        </button>
+        <button class="qa" id="qaNotify">
+          <span class="qa-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+          <span class="qa-t">Notifications</span>
+          <span class="qa-d">Subscribe by email</span>
+        </button>
+        <button class="qa" id="qaReports">
+          <span class="qa-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <span class="qa-t">Reports</span>
+          <span class="qa-d">Deleted-orders PDF</span>
+        </button>
+      </div>
+
+      <div class="section-title">Recent orders</div>
+      <div class="recent" id="recentList"><div class="recent-empty">Loading…</div></div>
+    </section>
+
+    <!-- ---- Orders ---- -->
+    <section class="view" id="view-orders" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Orders</h1>
+          <div class="sub">Create, edit and delete orders stored in DynamoDB</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn cart" id="ordersNew">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          New order
+        </button>
+      </div>
+
+      <div class="orders-bar">
+        <div class="search-box">
+          <button class="go" id="searchBtn" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </button>
+          <input id="search" placeholder="Search by description or ID…" aria-label="Search orders" />
+        </div>
+        <select class="sort" id="sortSelect" aria-label="Sort orders">
+          <option value="newest">Sort by: Newest first</option>
+          <option value="oldest">Sort by: Oldest first</option>
+          <option value="price-desc">Sort by: Price high → low</option>
+          <option value="price-asc">Sort by: Price low → high</option>
+        </select>
+      </div>
+
+      <div class="results" id="resultsLine">Loading…</div>
+      <div class="grid" id="grid" aria-live="polite"></div>
+    </section>
+
+    <!-- ---- Image Analysis ---- -->
+    <section class="view" id="view-analyze" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Image Analysis</h1>
+          <div class="sub">Amazon Rekognition detects labels and suggests an order description</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-body">
+          <div class="ai-grid">
+            <div>
+              <button class="dropzone" id="dropzone" aria-label="Upload an image to analyze">
+                <span class="dz-icon" id="dzIcon">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+                </span>
+                <b id="dzTitle">Drop image here or browse</b>
+                <span style="font-size:12px" id="dzSub">JPEG / PNG · up to 5 MB</span>
+                <img class="dz-preview" id="dzPreview" alt="Selected image preview" hidden />
+              </button>
+              <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden />
+            </div>
+            <div id="aiResults">
+              <div class="ai-placeholder">Upload an image and Rekognition's labels will appear here.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- ============ TOOLBAR ============ -->
-    <div class="toolbar">
-      <div class="results" id="resultsLine">Loading…</div>
-      <div class="spacer"></div>
-      <select class="sort" id="sortSelect" aria-label="Sort orders">
-        <option value="newest">Sort by: Newest first</option>
-        <option value="oldest">Sort by: Oldest first</option>
-        <option value="price-desc">Sort by: Price high → low</option>
-        <option value="price-asc">Sort by: Price low → high</option>
-      </select>
-    </div>
-
-    <!-- ============ PRODUCT GRID ============ -->
-    <div class="grid" id="grid" aria-live="polite"></div>
-
-  </div>
-
-  <!-- ============ MODALS ============ -->
-  <div class="overlay" id="orderOverlay" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
-      <div class="m-head" id="orderModalTitle">Create new order</div>
-      <form id="orderForm" novalidate>
-        <div class="m-body">
-          <div class="field">
-            <label for="descInput">Description <span class="req">*</span></label>
-            <textarea class="input" id="descInput" rows="3" required></textarea>
-            <div class="hint" id="descHint">Tip: analyze an image above to auto-fill this field.</div>
-            <div class="err" id="descErr" hidden></div>
-          </div>
-          <div class="field">
-            <label for="priceInput">Price (USD) <span class="req">*</span></label>
-            <input class="input mono" id="priceInput" inputmode="decimal" autocomplete="off" required />
-            <div class="err" id="priceErr" hidden></div>
-          </div>
+    <!-- ---- Notifications ---- -->
+    <section class="view" id="view-notify" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Notifications</h1>
+          <div class="sub">Subscribe an email to order notifications via Amazon SNS</div>
         </div>
-        <div class="m-foot">
-          <button type="button" class="btn" id="orderCancel">Cancel</button>
-          <button type="submit" class="btn buy" id="orderSubmit">Place order</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="overlay" id="deleteOverlay" hidden>
-    <div class="modal" style="max-width:410px" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
-      <div class="m-head" id="deleteModalTitle">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B12704" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-        Delete this order?
       </div>
+      <div class="panel">
+        <div class="panel-body">
+          <div class="sub-block">
+            <h3>Subscribe</h3>
+            <div class="blurb">Enter an email to receive order notifications. Confirm via the email AWS sends.</div>
+            <div class="stack-row">
+              <input class="input" id="subEmailInput" type="email"
+                     placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+              <button class="btn cart" id="subscribeBtn">Subscribe</button>
+            </div>
+            <div class="inline-result" id="subscribeResult" hidden></div>
+          </div>
+
+          <div class="sub-block">
+            <h3>Unsubscribe</h3>
+            <div class="blurb">Enter your email to stop receiving notifications.</div>
+            <div class="stack-row">
+              <input class="input" id="unsubEmailInput" type="email"
+                     placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+              <button class="btn danger" id="unsubscribeBtn">Unsubscribe</button>
+            </div>
+            <div class="inline-result" id="unsubscribeResult" hidden></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Reports ---- -->
+    <section class="view" id="view-reports" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Reports</h1>
+          <div class="sub">Generate a PDF summary of deleted orders and open it in a new tab</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-body">
+          <button class="btn buy" id="downloadPdfBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            Download Deleted Orders PDF
+          </button>
+          <div class="inline-result" id="reportResult" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Settings ---- -->
+    <section class="view" id="view-settings" tabindex="-1" hidden>
+      <div class="view-header">
+        <div>
+          <h1>Settings</h1>
+          <div class="sub">Point the client at your API Gateway endpoint</div>
+        </div>
+      </div>
+      <div class="banner" id="settingsBanner" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        <span>Welcome! Paste the invoke URL printed by <b>deploy.py</b> below and press Save to start managing orders.</span>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>API endpoint</h2>
+          <div class="sub">Saved in this browser (localStorage) — survives credential rotation between Learner Lab sessions</div></div>
+        <div class="panel-body">
+          <div class="settings-row">
+            <input class="input mono" id="apiUrlInput"
+                   placeholder="https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod"
+                   autocomplete="off" spellcheck="false" />
+            <button class="btn" id="testBtn">Test</button>
+            <button class="btn cart" id="saveBtn">Save</button>
+          </div>
+          <div class="test-result" id="testResult" hidden></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="overlay" id="orderOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+    <div class="m-head" id="orderModalTitle">Create new order</div>
+    <form id="orderForm" novalidate>
       <div class="m-body">
-        <div class="warn-line" id="deleteText"></div>
+        <div class="field">
+          <label for="descInput">Description <span class="req">*</span></label>
+          <textarea class="input" id="descInput" rows="3" required></textarea>
+          <div class="hint" id="descHint">Tip: use Image Analysis to auto-fill this field.</div>
+          <div class="err" id="descErr" hidden></div>
+        </div>
+        <div class="field">
+          <label for="priceInput">Price (USD) <span class="req">*</span></label>
+          <input class="input mono" id="priceInput" inputmode="decimal" autocomplete="off" required />
+          <div class="err" id="priceErr" hidden></div>
+        </div>
       </div>
       <div class="m-foot">
-        <button class="btn" id="deleteCancel">Cancel</button>
-        <button class="btn danger-fill" id="deleteConfirm">Delete order</button>
+        <button type="button" class="btn" id="orderCancel">Cancel</button>
+        <button type="submit" class="btn buy" id="orderSubmit">Place order</button>
       </div>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="deleteOverlay" hidden>
+  <div class="modal" style="max-width:410px" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <div class="m-head" id="deleteModalTitle">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B12704" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+      Delete this order?
+    </div>
+    <div class="m-body">
+      <div class="warn-line" id="deleteText"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn" id="deleteCancel">Cancel</button>
+      <button class="btn danger-fill" id="deleteConfirm">Delete order</button>
     </div>
   </div>
+</div>
 
-  <!-- toasts -->
-  <div class="toasts" id="toasts" aria-live="polite"></div>
+<!-- toasts -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -553,8 +688,11 @@
 
   /* ---------------- state ---------------- */
   const LS_KEY = "oms_api_base";
+  const LS_TAB = "oms_tab";
+  const TABS = ["overview", "orders", "analyze", "notify", "reports", "settings"];
   const state = {
     apiBase: (localStorage.getItem(LS_KEY) || "").replace(/\/+$/, ""),
+    tab: localStorage.getItem(LS_TAB) || "overview",
     orders: [],
     filter: "",
     sort: "newest",
@@ -589,7 +727,7 @@
 
   /* ---------------- api ---------------- */
   async function call(method, path, body) {
-    if (!state.apiBase) throw new Error("API URL is not configured — open Settings.");
+    if (!state.apiBase) throw new Error("API URL is not configured — open the Settings tab.");
     const opts = { method, headers: { "Content-Type": "application/json" } };
     if (body !== undefined) opts.body = JSON.stringify(body);
     let res;
@@ -615,6 +753,21 @@
     put:  (p, b) => call("PUT", p, b),
     del:  (p)    => call("DELETE", p),
   };
+
+  /* ---------------- tab navigation ---------------- */
+  function showTab(name) {
+    if (!TABS.includes(name)) name = "overview";
+    state.tab = name;
+    localStorage.setItem(LS_TAB, name);
+    TABS.forEach((t) => { $("view-" + t).hidden = (t !== name); });
+    document.querySelectorAll(".nav-item").forEach((el) =>
+      el.classList.toggle("active", el.dataset.tab === name));
+    if (name === "settings") $("apiUrlInput").value = state.apiBase;
+    // a11y: move focus to the active view's heading without scrolling the page
+    const view = $("view-" + name);
+    if (view) view.focus({ preventScroll: true });
+    window.scrollTo({ top: 0 });
+  }
 
   /* ---------------- connection status ---------------- */
   function setConnected(ok) {
@@ -664,6 +817,9 @@
   function renderStats() {
     const n = state.orders.length;
     $("cartCount").textContent = n + (n === 1 ? " order" : " orders");
+    const navBadge = $("navOrderCount");
+    navBadge.hidden = n === 0;
+    navBadge.textContent = n;
     $("statCount").textContent = n;
     if (n === 0) {
       $("statTotal").textContent = "$0";
@@ -677,6 +833,24 @@
     const newest = state.orders.reduce((a, b) =>
       (a.creationDate || "") > (b.creationDate || "") ? a : b);
     $("statNewest").textContent = relTime(newest.creationDate);
+  }
+
+  function renderRecent() {
+    const box = $("recentList");
+    if (state.loading) { box.innerHTML = '<div class="recent-empty">Loading…</div>'; return; }
+    if (!state.orders.length) { box.innerHTML = '<div class="recent-empty">No orders yet.</div>'; return; }
+    const recent = [...state.orders]
+      .sort((a, b) => (b.creationDate || "").localeCompare(a.creationDate || ""))
+      .slice(0, 5);
+    box.innerHTML = recent
+      .map((o) =>
+        '<div class="recent-row">' +
+        '<span class="r-desc">' + esc(o.description || "(no description)") + "</span>" +
+        '<span class="r-when">' + esc(relTime(o.creationDate)) + "</span>" +
+        '<span class="r-price mono">' + fmtMoney(Number(o.price) || 0) + "</span>" +
+        "</div>"
+      )
+      .join("");
   }
 
   function priceHtml(p) {
@@ -735,7 +909,7 @@
     if (!state.apiBase) {
       return (
         '<div class="empty">' + icon +
-        "<b>No API configured</b>Open Settings (top right) and paste the invoke URL printed by deploy.py.</div>"
+        "<b>No API configured</b>Open the Settings tab and paste the invoke URL printed by deploy.py.</div>"
       );
     }
     if (state.filter.trim()) {
@@ -746,7 +920,7 @@
     }
     return (
       '<div class="empty">' + icon +
-      "<b>No orders yet</b>Create your first order with the button above, or analyze a product image.</div>"
+      "<b>No orders yet</b>Create your first order with the New order button, or analyze a product image.</div>"
     );
   }
 
@@ -756,6 +930,7 @@
       $("resultsLine").textContent = "Loading orders…";
       grid.innerHTML = ADD_TILE + skeletons(7);
       bindAddTile();
+      renderRecent();
       return;
     }
     const vis = visibleOrders();
@@ -764,23 +939,14 @@
       ? "<b>" + vis.length + "</b> of <b>" + state.orders.length + "</b> results for <b>“" + esc(q) + "”</b>"
       : "<b>" + vis.length + "</b> " + (vis.length === 1 ? "order" : "orders");
 
-    if (vis.length === 0 && !q && state.orders.length === 0) {
-      grid.innerHTML = ADD_TILE + emptyState();
-    } else if (vis.length === 0) {
+    if (vis.length === 0) {
       grid.innerHTML = ADD_TILE + emptyState();
     } else {
       grid.innerHTML = ADD_TILE + vis.map(orderCard).join("");
     }
     bindAddTile();
     renderStats();
-
-    // sync sort UI ("All orders", index 0, highlights only for the default sort)
-    document.querySelectorAll(".subnav .item[data-sort]").forEach((el, i) => {
-      el.classList.toggle(
-        "active",
-        i === 0 ? state.sort === "newest" : el.dataset.sort === state.sort
-      );
-    });
+    renderRecent();
     $("sortSelect").value = state.sort;
   }
 
@@ -823,7 +989,11 @@
     }
   });
 
-  /* ---------------- search & sort ---------------- */
+  /* ---------------- nav, search & sort ---------------- */
+  document.querySelectorAll(".nav-item").forEach((el) =>
+    el.addEventListener("click", () => showTab(el.dataset.tab)));
+  $("logo").addEventListener("click", loadOrders);
+
   let searchTimer;
   $("search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);
@@ -840,30 +1010,16 @@
     state.sort = e.target.value;
     render();
   });
-  document.querySelectorAll(".subnav .item[data-sort]").forEach((el) => {
-    el.addEventListener("click", () => {
-      state.sort = el.dataset.sort;
-      render();
-    });
-  });
-  $("logo").addEventListener("click", loadOrders);
-  $("cartLink").addEventListener("click", () =>
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }));
-  $("statusLink").addEventListener("click", loadOrders);
+
+  /* quick actions */
+  $("ovNewOrder").addEventListener("click", () => openOrderModal(null));
+  $("ordersNew").addEventListener("click", () => openOrderModal(null));
+  $("qaNew").addEventListener("click", () => openOrderModal(null));
+  $("qaAnalyze").addEventListener("click", () => showTab("analyze"));
+  $("qaNotify").addEventListener("click", () => showTab("notify"));
+  $("qaReports").addEventListener("click", () => showTab("reports"));
 
   /* ---------------- settings ---------------- */
-  function toggleSettings(show) {
-    const panel = $("settingsPanel");
-    const wanted = show === undefined ? panel.hidden : show;
-    panel.hidden = !wanted;
-    $("settingsLink").setAttribute("aria-expanded", String(wanted));
-    if (wanted) {
-      $("apiUrlInput").value = state.apiBase;
-      $("apiUrlInput").focus();
-    }
-  }
-  $("settingsLink").addEventListener("click", () => toggleSettings());
-
   $("saveBtn").addEventListener("click", () => {
     const url = $("apiUrlInput").value.trim().replace(/\/+$/, "");
     if (!/^https?:\/\/.+/.test(url)) {
@@ -873,8 +1029,9 @@
     state.apiBase = url;
     localStorage.setItem(LS_KEY, url);
     setConnected(null);
+    $("settingsBanner").hidden = true;
     toast("API URL saved");
-    toggleSettings(false);
+    showTab("overview");
     loadOrders();
   });
 
@@ -1051,10 +1208,6 @@
   /* ---------------- image analysis ---------------- */
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-  $("aiLink").addEventListener("click", () => {
-    $("aiPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-    $("dropzone").focus();
-  });
   $("dropzone").addEventListener("click", () => $("fileInput").click());
   $("dropzone").addEventListener("dragover", (ev) => {
     ev.preventDefault();
@@ -1223,9 +1376,11 @@
   /* ---------------- boot ---------------- */
   setConnected(null);
   if (state.apiBase) {
+    showTab(state.tab);
     loadOrders();
   } else {
-    toggleSettings(true);
+    showTab("settings");
+    $("settingsBanner").hidden = false;
     render();
   }
 })();
