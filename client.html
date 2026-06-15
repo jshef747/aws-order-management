@@ -3,11 +3,11 @@
   Order Management System - web client.
   Single self-contained file: HTML + CSS + vanilla JS, no build step.
   Talks to the orders-api API Gateway deployed by deploy.py.
-  Set the API base URL via the Settings tab (saved in localStorage),
-  using the invoke URL printed by deploy.py each Learner Lab session.
+  The API base URL is hardcoded (DEFAULT_API_BASE), so the client works
+  out of the box with no configuration.
 
-  Layout: left-sidebar dashboard with six tabbed views
-  (Overview, Orders, Analyze, Notifications, Reports, Settings).
+  Layout: left-sidebar dashboard with five tabbed views
+  (Overview, Orders, Analyze, Notifications, Reports).
 -->
 <html lang="en">
 <head>
@@ -294,13 +294,6 @@
   .inline-result.ok  { color: var(--success); }
   .inline-result.bad { color: var(--danger); }
 
-  /* ================= SETTINGS ================= */
-  .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
-  .settings-row .input { flex: 1; min-width: 240px; width: auto; }
-  .test-result { font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 7px; }
-  .test-result.ok  { color: var(--success); }
-  .test-result.bad { color: var(--danger); }
-
   /* ================= MODALS ================= */
   .overlay {
     position: fixed; inset: 0; z-index: 100;
@@ -406,14 +399,10 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
         Reports
       </button>
-      <button class="nav-item" data-tab="settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        Settings
-      </button>
     </nav>
 
     <div class="sidebar-foot">
-      <div class="row"><span class="conn-dot" id="connDot"></span> <span id="connText">Not configured</span></div>
+      <div class="row"><span class="conn-dot" id="connDot"></span> <span id="connText">Connecting…</span></div>
       <div class="row">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 3h2l2.5 12.5a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 7H6"/></svg>
         <span id="cartCount">— orders</span>
@@ -606,34 +595,6 @@
       </div>
     </section>
 
-    <!-- ---- Settings ---- -->
-    <section class="view" id="view-settings" tabindex="-1" hidden>
-      <div class="view-header">
-        <div>
-          <h1>Settings</h1>
-          <div class="sub">Point the client at your API Gateway endpoint</div>
-        </div>
-      </div>
-      <div class="banner" id="settingsBanner" hidden>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
-        <span>Welcome! Paste the invoke URL printed by <b>deploy.py</b> below and press Save to start managing orders.</span>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>API endpoint</h2>
-          <div class="sub">Saved in this browser (localStorage) — survives credential rotation between Learner Lab sessions</div></div>
-        <div class="panel-body">
-          <div class="settings-row">
-            <input class="input mono" id="apiUrlInput"
-                   placeholder="https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod"
-                   autocomplete="off" spellcheck="false" />
-            <button class="btn" id="testBtn">Test</button>
-            <button class="btn cart" id="saveBtn">Save</button>
-          </div>
-          <div class="test-result" id="testResult" hidden></div>
-        </div>
-      </div>
-    </section>
-
   </main>
 </div>
 
@@ -689,9 +650,13 @@
   /* ---------------- state ---------------- */
   const LS_KEY = "oms_api_base";
   const LS_TAB = "oms_tab";
-  const TABS = ["overview", "orders", "analyze", "notify", "reports", "settings"];
+  // Hardcoded production API base (API Gateway) — the client works out of the
+  // box with no configuration. An "oms_api_base" value in localStorage still
+  // overrides it if ever needed (e.g. the partner's separate Learner Lab).
+  const DEFAULT_API_BASE = "https://qetaaj1tgk.execute-api.us-east-1.amazonaws.com/prod";
+  const TABS = ["overview", "orders", "analyze", "notify", "reports"];
   const state = {
-    apiBase: (localStorage.getItem(LS_KEY) || "").replace(/\/+$/, ""),
+    apiBase: (localStorage.getItem(LS_KEY) || DEFAULT_API_BASE).replace(/\/+$/, ""),
     tab: localStorage.getItem(LS_TAB) || "overview",
     orders: [],
     filter: "",
@@ -727,7 +692,6 @@
 
   /* ---------------- api ---------------- */
   async function call(method, path, body) {
-    if (!state.apiBase) throw new Error("API URL is not configured — open the Settings tab.");
     const opts = { method, headers: { "Content-Type": "application/json" } };
     if (body !== undefined) opts.body = JSON.stringify(body);
     let res;
@@ -762,7 +726,6 @@
     TABS.forEach((t) => { $("view-" + t).hidden = (t !== name); });
     document.querySelectorAll(".nav-item").forEach((el) =>
       el.classList.toggle("active", el.dataset.tab === name));
-    if (name === "settings") $("apiUrlInput").value = state.apiBase;
     // a11y: move focus to the active view's heading without scrolling the page
     const view = $("view-" + name);
     if (view) view.focus({ preventScroll: true });
@@ -774,7 +737,6 @@
     state.connected = ok;
     const dot = $("connDot"), txt = $("connText");
     dot.classList.remove("ok", "bad");
-    if (!state.apiBase) { txt.textContent = "Not configured"; return; }
     if (ok === true)  { dot.classList.add("ok");  txt.textContent = "Connected"; }
     else if (ok === false) { dot.classList.add("bad"); txt.textContent = "Offline"; }
     else { txt.textContent = "Unknown"; }
@@ -906,12 +868,6 @@
   function emptyState() {
     const icon =
       '<div class="big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg></div>';
-    if (!state.apiBase) {
-      return (
-        '<div class="empty">' + icon +
-        "<b>No API configured</b>Open the Settings tab and paste the invoke URL printed by deploy.py.</div>"
-      );
-    }
     if (state.filter.trim()) {
       return (
         '<div class="empty">' + icon +
@@ -1018,57 +974,6 @@
   $("qaAnalyze").addEventListener("click", () => showTab("analyze"));
   $("qaNotify").addEventListener("click", () => showTab("notify"));
   $("qaReports").addEventListener("click", () => showTab("reports"));
-
-  /* ---------------- settings ---------------- */
-  $("saveBtn").addEventListener("click", () => {
-    const url = $("apiUrlInput").value.trim().replace(/\/+$/, "");
-    if (!/^https?:\/\/.+/.test(url)) {
-      showTestResult(false, "Enter a full URL starting with https://");
-      return;
-    }
-    state.apiBase = url;
-    localStorage.setItem(LS_KEY, url);
-    setConnected(null);
-    $("settingsBanner").hidden = true;
-    toast("API URL saved");
-    showTab("overview");
-    loadOrders();
-  });
-
-  function showTestResult(ok, msg) {
-    const el = $("testResult");
-    el.hidden = false;
-    el.className = "test-result " + (ok ? "ok" : "bad");
-    el.innerHTML =
-      (ok
-        ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>'
-        : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6L6 18M6 6l12 12"/></svg>') +
-      esc(msg);
-  }
-
-  $("testBtn").addEventListener("click", async () => {
-    const url = $("apiUrlInput").value.trim().replace(/\/+$/, "");
-    if (!/^https?:\/\/.+/.test(url)) {
-      showTestResult(false, "Enter a full URL starting with https://");
-      return;
-    }
-    const btn = $("testBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Testing';
-    try {
-      const res = await fetch(url + "/orders");
-      const data = await res.json().catch(() => null);
-      if (res.ok && data && Array.isArray(data.orders)) {
-        showTestResult(true, "Connected — " + data.orders.length + " orders found");
-      } else {
-        showTestResult(false, "Reached the server but got HTTP " + res.status);
-      }
-    } catch (e) {
-      showTestResult(false, "Could not reach the API (network/CORS error)");
-    }
-    btn.disabled = false;
-    btn.textContent = "Test";
-  });
 
   /* ---------------- create / edit modal ---------------- */
   function openOrderModal(order) {
@@ -1375,14 +1280,8 @@
 
   /* ---------------- boot ---------------- */
   setConnected(null);
-  if (state.apiBase) {
-    showTab(state.tab);
-    loadOrders();
-  } else {
-    showTab("settings");
-    $("settingsBanner").hidden = false;
-    render();
-  }
+  showTab(state.tab);
+  loadOrders();
 })();
 </script>
 </body>
